@@ -24,10 +24,11 @@ dirname = reverse $ dropWhile (/= '/') $ reverse __FILE__
 
 texts :: [(FilePath, BS.ByteString)]
 texts = unsafePerformIO $ do
-  contents <- map ((dirname ++ "/examples/") ++) <$> (getDirectoryContents $ dirname ++ "/examples")
+  contents <- map ((dirname ++ "/examples/") ++)
+          <$> getDirectoryContents (dirname ++ "/examples")
   files <- filterM doesFileExist contents
-  res <- mapM (\x -> BS.readFile x >>= \c -> return (x,c  )) files
-  return res
+  mapM (\x -> BS.readFile x >>= \c -> return (x,c  )) files
+
 
   -- this is just an ugly burn-in test - we collect examples of
   -- robots.txt and check we can read them all.
@@ -36,30 +37,30 @@ texts = unsafePerformIO $ do
 spec :: Spec
 spec = do
   describe "simple parsing" $ do
-    it "can read a token" $ do
-      (parseOnly tokenP "foo") `shouldBe`
+    it "can read a token" $
+      parseOnly tokenP "foo" `shouldBe`
         Right "foo"
-    it "can read a user agent" $ do
-      (parseOnly agentP "User-agent: *\n") `shouldBe`
+    it "can read a user agent" $
+      parseOnly agentP "User-agent: *\n" `shouldBe`
         Right Wildcard
-    it "can read a specific user agent" $ do
-      (parseOnly agentP "User-agent: Buzzbot\n") `shouldBe`
+    it "can read a specific user agent" $
+      parseOnly agentP "User-agent: Buzzbot\n" `shouldBe`
         Right (Literal "Buzzbot")
-    it "can read allow directives" $ do
-      (parseOnly directiveP "Allow: /\n") `shouldBe`
+    it "can read allow directives" $
+      parseOnly directiveP "Allow: /\n" `shouldBe`
         Right (Allow "/")
-    it "should read a full robots.txt" $ do
-      (parseOnly robotP "User-agent: *\nDisallow: /\n")
+    it "should read a full robots.txt" $
+      parseOnly robotP "User-agent: *\nDisallow: /\n"
         `shouldBe` Right ([([Wildcard], [Disallow "/"])],[])
-    it "should cope with end-of-line comments" $ do
-      (parseOnly robotP "User-agent: *\nDisallow: / # don't read my site\nAllow: /foo")
+    it "should cope with end-of-line comments" $
+      parseOnly robotP "User-agent: *\nDisallow: / # don't read my site\nAllow: /foo"
         `shouldBe` Right ([([Wildcard], [Disallow "/", Allow "/foo"])],[])
-    it "can parse this stupid empty disallow line that the BNF suggests should be illegal" $ do
-      (parseOnly robotP "User-agent: *\nDisallow:\n")
-        `shouldBe` Right (([([Wildcard], [Allow "/"])]),[])
-    it "ignores the sitemap extension (and any other unrecognised text" $ do
-      (parseOnly robotP "Sitemap: http:www.ebay.com/lst/PDP_US_main_index.xml\nUser-agent: *\nDisallow: /\n")
-        `shouldBe` Right (([([Wildcard], [Disallow "/"])]), ["Sitemap: http:www.ebay.com/lst/PDP_US_main_index.xml"])
+    it "can parse this stupid empty disallow line that the BNF suggests should be illegal" $
+      parseOnly robotP "User-agent: *\nDisallow:\n"
+        `shouldBe` Right ([([Wildcard], [Allow "/"])],[])
+    it "ignores the sitemap extension (and any other unrecognised text" $
+      parseOnly robotP "Sitemap: http:www.ebay.com/lst/PDP_US_main_index.xml\nUser-agent: *\nDisallow: /\n"
+        `shouldBe` Right ([([Wildcard], [Disallow "/"])], ["Sitemap: http:www.ebay.com/lst/PDP_US_main_index.xml"])
 
 
 
@@ -135,7 +136,7 @@ spec = do
       it ("webcrawler & excite access to " ++ show path) $ do
         canAccess "webcrawler" robot path `shouldBe` web_and_excite
         canAccess "excite" robot path `shouldBe` web_and_excite
-      it ("otherbot access to " ++ show path) $ do
+      it ("otherbot access to " ++ show path) $
         canAccess "otherbot" robot path `shouldBe` other
 
   -- describe "allowable" $ do
@@ -154,7 +155,7 @@ spec = do
   --   it "allows access to specialbot special area" $ do
   --     canAccess "OtherSpecial"  robot "/only_special" `shouldBe` True
 
-  describe "regressions" $ do
+  describe "regressions" $
     it "chooses the most specific user agent from helloworldweb" $ do
       (Right hellobot) <- parseOnly robotP <$> liftIO (BS.readFile "./test/examples/helloworldweb2.com")
       canAccess "Mozilla/5.0 (compatible; meanpathbot/1.0; +http://www.meanpath.com/meanpathbot.html)" hellobot "/" `shouldBe` False
@@ -163,11 +164,11 @@ spec = do
 
 
   describe "incorrect robots files" $ do
-    it "treats HTML as garbage" $ do
+    it "treats HTML as garbage" $
       parseRobots "<html><head>a thing</head><body>yo, i'm not a robots file</body></html>\n"
         `shouldSatisfy` myIsLeft
 
 
-    it "can handle no-newline files" $ do
+    it "can handle no-newline files" $
       parseRobots "<html><head>a thing</head><body>yo, i'm not a robots file</body></html>"
         `shouldSatisfy` myIsLeft

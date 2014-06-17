@@ -14,19 +14,92 @@ import           Data.Char             (toUpper)
 import           Data.Time.Clock
 import           Data.Time.LocalTime()
 import           Data.Ratio
-
-type Robot = ([([UserAgent], [Directive])], [Unparsable])
-
-type Unparsable = ByteString
-
-data UserAgent = Wildcard | Literal ByteString
-  deriving (Show,Eq)
-type Path = ByteString
+import qualified Data.IntervalMap.FingerTree as IM
+import qualified Data.Map.Strict as Map
+import qualified Data.Set        as Set
 
 -- http://www.conman.org/people/spc/robots2.html
 -- This was never actually accepted as a standard,
 -- but some sites do use it.
-type TimeInterval = (DiffTime, DiffTime)
+type TimeInterval = IM.Interval DiffTime
+
+type UserAgents = Set.Set UserAgent
+
+data PathDirective = AllowD
+                   | DisallowD
+                   | NoArchiveD
+                   | NoSnippetD
+                   | NoTranslateD
+                   | NoIndexD
+    deriving (Eq,Ord,Show)
+
+type PathsDirectives = Map.Map Path [PathDirective]
+
+type TimeDirectives = IM.IntervalMap TimeInterval
+
+data Directives = Directives
+  { timeDirectives :: IM.IntervalMap DiffTime Rational
+  , pathDirectives :: PathsDirectives
+  -- dependent on acceptance of patch for FingerTree
+  } deriving Show
+
+emptyDirectives :: Directives
+emptyDirectives = Directives IM.empty Map.empty
+
+insertPathDirective :: Path -> PathDirective -> Directives -> Directives
+insertPathDirective p d dirs =
+  dirs { pathDirectives = Map.insertWith (++) p [d] (pathDirectives dirs) }
+
+-- crawldelay is a rational in seconds
+insertTimeDirective :: Rational -> TimeInterval -> Directives -> Directives
+insertTimeDirective cd ti dirs =
+  dirs { timeDirectives = IM.insert ti cd (timeDirectives dirs) }
+
+{-type UserAgentDirectives = Map.Map UserAgents Directives-}
+
+data Robot = Robot
+  { directives :: Map.Map UserAgents Directives
+  , siteMaps   :: [ByteString] -- TODO
+  -- dependent on acceptance of patch for FingerTree
+  } deriving Show
+
+type RobotTxt = (Robot,[Unparsable])
+
+postProcessRobots :: RobotParsing -> RobotTxt
+postProcessRobots (puds,unp) = (process puds, unp)
+  where
+    process :: [([UserAgent],[Directive])] -> Robot
+    process puds' = Robot (foldr processUDs Map.empty puds') []
+    -- process user directives
+    processUDs :: ([UserAgent],[Directive]) -> Map.Map UserAgents Directives
+                                            -> Map.Map UserAgents Directives
+    processUDs (uas, dirs) dirsMap = let
+        -- if a list of user agents has the Wildcard, then
+        -- discard the remaining less specific elements.
+        userAgents = if Wildcard `elem` uas
+                      then Set.singleton Wildcard
+                      else Set.fromList uas
+        newDirs = foldr processDirs emptyDirectives dirs
+      in Map.insert userAgents newDirs dirsMap
+    -- process directives alone
+    processDirs :: Directive -> Directives -> Directives
+    processDirs dir dirs = case dir of
+      Allow p       -> insertPathDirective p AllowD       dirs
+      Disallow p    -> insertPathDirective p DisallowD    dirs
+      NoArchive p   -> insertPathDirective p NoArchiveD   dirs
+      NoSnippet p   -> insertPathDirective p NoSnippetD   dirs
+      NoTranslate p -> insertPathDirective p NoTranslateD dirs
+      NoIndex p     -> insertPathDirective p NoIndexD     dirs
+      CrawlDelay cd ti -> insertTimeDirective cd ti       dirs
+
+type RobotParsing = ([([UserAgent], [Directive])], [Unparsable])
+
+type Unparsable = ByteString
+
+data UserAgent = Wildcard | Literal ByteString
+  deriving (Show,Eq,Ord)
+
+type Path = ByteString
 
 -- Crawldelay may have a decimal point
 -- http://help.yandex.com/webmaster/controlling-robot/robots-txt.xml
@@ -89,13 +162,13 @@ parseTimeInterval = do
   (hours_start, mins_start) <- parseHourMinute
   void         $ (skipSpace >> char '-' >> skipSpace) <|> skipSpace
   (hours_end  , mins_end  ) <- parseHourMinute
-  return ( secondsToDiffTime (hours_start * 60 * 60 + mins_start * 60)
-         , secondsToDiffTime (hours_end   * 60 * 60 + mins_end   * 60))
+  return $
+    IM.Interval (secondsToDiffTime (hours_start * 60 * 60 + mins_start * 60))
+                (secondsToDiffTime (hours_end   * 60 * 60 + mins_end   * 60))
 
 allDay :: TimeInterval
-allDay =  ( secondsToDiffTime 0
-          , secondsToDiffTime (24*60*60) -- because of leap seconds
-          )
+allDay = IM.Interval (secondsToDiffTime 0)
+                     (secondsToDiffTime (24*60*60)) -- because of leap seconds
 
 parseRequestRate :: Parser Directive
 parseRequestRate = do
@@ -127,7 +200,7 @@ strip :: ByteString -> ByteString
 strip = BS.reverse . BS.dropWhile (==' ') . BS.reverse . BS.dropWhile (==' ')
 
 -- | parseRobots is the main entry point for parsing a robots.txt file.
-parseRobots :: ByteString -> Either String Robot
+parseRobots :: ByteString -> Either String RobotParsing
 parseRobots input = case parsed of
   -- special case no parsable lines and rubbish
   Right ([], out@(_:_)) ->
@@ -150,7 +223,7 @@ parseRobots input = case parsed of
               . dropUTF8BOM
               $ input
 
-robotP :: Parser Robot
+robotP :: Parser RobotParsing
 robotP = do
   (dirs, unparsable) <- partitionEithers <$> many (eitherP agentDirectiveP unparsableP) <?> "robot"
   return (dirs, filter (/= "") unparsable)
@@ -212,9 +285,11 @@ tokenWithSpacesP :: Parser ByteString
 tokenWithSpacesP = skipSpace >> takeWhile1 (not . (\c -> c == '#' || AT.isEndOfLine c))
 							 <* takeTill AT.isEndOfLine
 
+{-unionTimeIntervals :: Robots -> Robots-}
+
 -- I lack the art to make this prettier.
 -- Currently does not take into account the CrawlDelay / Request Rate directives
-canAccess :: ByteString -> Robot -> Path -> Bool
+canAccess :: ByteString -> RobotParsing -> Path -> Bool
 canAccess _ _ "/robots.txt" = True -- special-cased
 canAccess agent (robot,_) path = case stanzas of
   [] -> True
