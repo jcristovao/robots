@@ -64,7 +64,9 @@ findPathInTree test pos (p:pathPieces) =
       Nothing     -> (pos,pathPieces)
       Just newpos -> findPathInTree test newpos pathPieces
     else case Z.next pos of
-      Nothing -> (pos,p:pathPieces)
+      Nothing -> case Z.parent pos of
+                        Nothing -> (pos,p:pathPieces)
+                        Just pa -> (pa ,p:pathPieces)
       Just sibpos -> findPathInTree test sibpos (p:pathPieces)
 
 insertPathInTree
