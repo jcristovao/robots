@@ -266,7 +266,6 @@ directiveP = choice [ stringCI "Disallow:" >> skipSpace >>
 
 agentP :: Parser UserAgent
 agentP = do
-  void $ stringCI "user-agent:"
   skipSpace
   ((string "*" >> return Wildcard) <|>
    (Literal  <$> tokenWithSpacesP)) <* skipSpace <* endOfLine <?> "agent"
@@ -285,17 +284,16 @@ tokenWithSpacesP :: Parser ByteString
 tokenWithSpacesP = skipSpace >> takeWhile1 (not . (\c -> c == '#' || AT.isEndOfLine c))
 							 <* takeTill AT.isEndOfLine
 
-{-unionTimeIntervals :: Robots -> Robots-}
 
 -- I lack the art to make this prettier.
--- Currently does not take into account the CrawlDelay / Request Rate directives
+-- Currently does not take into account the canAccess :: ByteString -> RobotParsing -> Path -> Bool
 canAccess :: ByteString -> RobotParsing -> Path -> Bool
 canAccess _ _ "/robots.txt" = True -- special-cased
 canAccess agent (robot,_) path = case stanzas of
   [] -> True
   ((_,directives):_) -> matchingDirective directives
-  where stanzas = catMaybes [find (any (`isLiteralSubstring` agent)  . fst) robot,
-                             find ((Wildcard `elem`) . fst) robot]
+  where stanzas = catMaybes [find (any (`isLiteralSubstring` agent) . fst) robot,
+                             find (               (Wildcard `elem`) . fst) robot]
 
 
         isLiteralSubstring (Literal a) us = a `BS.isInfixOf` us
@@ -308,3 +306,19 @@ canAccess agent (robot,_) path = case stanzas of
             not (robot_path `BS.isPrefixOf` path) && matchingDirective xs
 
           _ -> matchingDirective xs
+
+canAccess' :: String -> RobotTxt -> Path -> Bool
+canAccess' _ _ "/robots.txt" = True  -- common sense
+canAccess' agent (Robot dirs _, _) p = let
+  keys  = foldr Set.intersection (Set.fromList [Wildcard, Literal (BS.pack agent)])
+        $ Map.keys dirs -- keys are sets
+  -- now fold through the keys, and get the rules
+  uas   = Map.findWithDefault
+                      (error "Assertion failed: User agent key must be valid")
+                      ua
+                      dirs
+
+
+  foldr (\ua acc -> filter (\x -> x `BS.isPrefixOf` p)
+                  . Map. keys pathDirectives
+                  .   in undefined
