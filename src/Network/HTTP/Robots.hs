@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PackageImports #-}
 module Network.HTTP.Robots where
 
 import           Control.Applicative
@@ -17,6 +18,10 @@ import           Data.Ratio
 import qualified Data.IntervalMap.FingerTree as IM
 import qualified Data.Map.Strict as Map
 import qualified Data.Set        as Set
+import qualified "containers" Data.Tree        as T
+import qualified Data.Tree.Zipper as Z
+import qualified System.FilePath  as FP
+import Data.Function
 
 -- http://www.conman.org/people/spc/robots2.html
 -- This was never actually accepted as a standard,
@@ -33,7 +38,69 @@ data PathDirective = AllowD
                    | NoIndexD
     deriving (Eq,Ord,Show)
 
-type PathsDirectives = Map.Map Path [PathDirective]
+type PathDir = (String, Set.Set PathDirective)
+type PathsDirectives = T.Tree PathDir
+
+emptyPathsDirectives :: PathsDirectives
+emptyPathsDirectives = T.Node ("/",Set.empty) []
+
+{-pathThreeAddDir :: PathsDirectives -> PathDirective -> PathsDirectives-}
+{-pathThreeAddDir (T.Node (p,dirs) subs) dir = T.Node (p,dirs ++ [dir]) subs-}
+
+pathTreeJoinDir :: PathDirective -> PathsDirectives -> PathsDirectives
+pathTreeJoinDir dir (T.Node (p,dirs) subs) =
+                 T.Node (p,dirs `Set.union` Set.singleton dir) subs
+
+-- find position in tree that best matches given path
+findPathInTree
+  :: (a -> a -> Bool)
+  -> Z.TreePos Z.Full a
+  -> [a]
+  -> (Z.TreePos Z.Full a,[a])
+findPathInTree test pos []             = (pos,[])
+findPathInTree test pos (p:pathPieces) =
+  if test (Z.label pos) p
+    then case Z.firstChild pos of
+      Nothing     -> (pos,pathPieces)
+      Just newpos -> findPathInTree test newpos pathPieces
+    else case Z.next pos of
+      Nothing -> (pos,p:pathPieces)
+      Just sibpos -> findPathInTree test sibpos (p:pathPieces)
+
+insertPathInTree
+  :: Z.TreePos Z.Full (String, Set.Set PathDirective)
+  -> PathDirective
+  -> [(String, Set.Set PathDirective)]
+  -> Z.TreePos Z.Full (String, Set.Set PathDirective)
+insertPathInTree pos _ [] = pos
+insertPathInTree pos dir pathPieces = let
+  (partialPos,remain) = findPathInTree ((==) `on` fst) pos pathPieces
+  in case remain of
+    []   -> Z.modifyTree (pathTreeJoinDir dir) partialPos
+    p:ps -> insertPathInTree' dir partialPos remain
+
+insertPathInTree' dir pos [] = pos
+insertPathInTree' dir pos (p:ps) = let
+  newPos = Z.insert (T.Node (fst p,Set.singleton dir) []) (Z.children pos)
+  in insertPathInTree' dir newPos ps
+
+
+
+buildPathTree :: [Directive] -> PathsDirectives
+buildPathTree dirs = let
+  -- initial conditions
+  initLoc  = Z.fromTree emptyPathsDirectives
+  -- just path directives
+  filterPathDirs = filter (\d -> case d of CrawlDelay _ _ -> False ; _ -> True)
+  -- process paths
+  proc loc dir = Z.root $ foldl insertByPath loc (FP.splitPath . extractPath $ dir)
+
+  {-insertByPath loc pathPiece = if label loc == pathPiece then-}
+  insertByPath = undefined
+
+
+  {-in Z.toTree . Z.root $ foldr proc initLoc (filterPathDirs dirs)-}
+  in undefined
 
 type TimeDirectives = IM.IntervalMap TimeInterval
 
@@ -44,11 +111,11 @@ data Directives = Directives
   } deriving Show
 
 emptyDirectives :: Directives
-emptyDirectives = Directives IM.empty Map.empty
+emptyDirectives = Directives IM.empty emptyPathsDirectives
 
 insertPathDirective :: Path -> PathDirective -> Directives -> Directives
-insertPathDirective p d dirs =
-  dirs { pathDirectives = Map.insertWith (++) p [d] (pathDirectives dirs) }
+insertPathDirective p d dirs = undefined
+  {-dirs { pathDirectives = Map.insertWith (++) p [d] (pathDirectives dirs) }-}
 
 -- crawldelay is a rational in seconds
 insertTimeDirective :: Rational -> TimeInterval -> Directives -> Directives
@@ -117,6 +184,15 @@ data Directive = Allow Path
                -- http://searchengineland.com/a-deeper-look-at-robotstxt-17573
                | NoIndex Path
   deriving (Show,Eq)
+
+extractPath :: Directive -> FilePath
+extractPath dir = BS.unpack $ case dir of
+  Allow p -> p
+  Disallow p -> p
+  NoArchive p -> p
+  NoSnippet p -> p
+  NoTranslate p -> p
+  NoIndex p -> p
 
 -- For use in the attoparsec monad, allows to reparse a sub expression
 subParser :: Parser a -> ByteString -> Parser a
@@ -313,12 +389,12 @@ canAccess' agent (Robot dirs _, _) p = let
   keys  = foldr Set.intersection (Set.fromList [Wildcard, Literal (BS.pack agent)])
         $ Map.keys dirs -- keys are sets
   -- now fold through the keys, and get the rules
-  uas   = Map.findWithDefault
-                      (error "Assertion failed: User agent key must be valid")
-                      ua
-                      dirs
+  {-uas   = Map.findWithDefault-}
+                      {-(error "Assertion failed: User agent key must be valid")-}
+                      {-ua-}
+                      {-dirs-}
 
-
-  foldr (\ua acc -> filter (\x -> x `BS.isPrefixOf` p)
-                  . Map. keys pathDirectives
-                  .   in undefined
+  in undefined
+  {-foldr (\ua acc -> filter (\x -> x `BS.isPrefixOf` p)-}
+                  {-. Map. keys pathDirectives-}
+                  {-.   in undefined-}
