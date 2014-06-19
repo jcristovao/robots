@@ -47,9 +47,9 @@ emptyPathsDirectives = T.Node ("/",Set.empty) []
 {-pathThreeAddDir :: PathsDirectives -> PathDirective -> PathsDirectives-}
 {-pathThreeAddDir (T.Node (p,dirs) subs) dir = T.Node (p,dirs ++ [dir]) subs-}
 
-pathTreeJoinDir :: PathDirective -> PathsDirectives -> PathsDirectives
+pathTreeJoinDir :: Set.Set PathDirective -> PathsDirectives -> PathsDirectives
 pathTreeJoinDir dir (T.Node (p,dirs) subs) =
-                 T.Node (p,dirs `Set.union` Set.singleton dir) subs
+                 T.Node (p,dirs `Set.union` dir) subs
 
 -- find position in tree that best matches given path
 findPathInTree
@@ -69,22 +69,25 @@ findPathInTree test pos (p:pathPieces) =
 
 insertPathInTree
   :: Z.TreePos Z.Full (String, Set.Set PathDirective)
-  -> PathDirective
   -> [(String, Set.Set PathDirective)]
   -> Z.TreePos Z.Full (String, Set.Set PathDirective)
-insertPathInTree pos _ [] = pos
-insertPathInTree pos dir pathPieces = let
+insertPathInTree pos [] = pos
+insertPathInTree pos pathPieces = let
   (partialPos,remain) = findPathInTree ((==) `on` fst) pos pathPieces
   in case remain of
-    []   -> Z.modifyTree (pathTreeJoinDir dir) partialPos
-    p:ps -> insertPathInTree' dir partialPos remain
+    []   -> Z.modifyTree (pathTreeJoinDir (snd . last $ pathPieces) ) partialPos
+    p:ps -> insertPathInTree' partialPos remain
 
-insertPathInTree' dir pos [] = pos
-insertPathInTree' dir pos (p:ps) = let
-  newPos = Z.insert (T.Node (fst p,Set.singleton dir) []) (Z.children pos)
-  in insertPathInTree' dir newPos ps
+insertPathInTree' pos [] = pos
+insertPathInTree' pos (p:ps) = let
+  newPos = Z.insert (T.Node p []) (Z.children pos)
+  in insertPathInTree' newPos ps
 
-
+zipWithLast :: PathDirective -> [FilePath] -> [PathDir]
+zipWithLast dir [] = []
+zipWithLast dir (x:[]) = [(x,Set.singleton dir)]
+zipWithLast dir xs =  zip (init xs) (repeat Set.empty)
+                   ++ [(last xs,Set.singleton dir)]
 
 buildPathTree :: [Directive] -> PathsDirectives
 buildPathTree dirs = let
@@ -93,14 +96,12 @@ buildPathTree dirs = let
   -- just path directives
   filterPathDirs = filter (\d -> case d of CrawlDelay _ _ -> False ; _ -> True)
   -- process paths
-  proc loc dir = Z.root $ foldl insertByPath loc (FP.splitPath . extractPath $ dir)
+  proc dir loc = Z.root $ insertPathInTree loc
+                        $ zipWithLast (extractDir dir)
+                                      (FP.splitPath . extractPath $ dir)
 
-  {-insertByPath loc pathPiece = if label loc == pathPiece then-}
-  insertByPath = undefined
 
-
-  {-in Z.toTree . Z.root $ foldr proc initLoc (filterPathDirs dirs)-}
-  in undefined
+  in Z.toTree . Z.root $ foldr proc initLoc (filterPathDirs dirs)
 
 type TimeDirectives = IM.IntervalMap TimeInterval
 
@@ -193,6 +194,18 @@ extractPath dir = BS.unpack $ case dir of
   NoSnippet p -> p
   NoTranslate p -> p
   NoIndex p -> p
+  _ -> error "Unexpected directive (1)"
+
+extractDir :: Directive -> PathDirective
+extractDir dir = case dir of
+  Allow _ -> AllowD
+  Disallow _ -> DisallowD
+  NoArchive _ -> NoArchiveD
+  NoSnippet _ -> NoSnippetD
+  NoTranslate _ -> NoTranslateD
+  NoIndex _ -> NoIndexD
+  _ -> error "Unexpected directive (2)"
+
 
 -- For use in the attoparsec monad, allows to reparse a sub expression
 subParser :: Parser a -> ByteString -> Parser a
