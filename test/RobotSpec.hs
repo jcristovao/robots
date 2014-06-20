@@ -2,6 +2,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 module RobotSpec where
 import           Network.HTTP.Robots
+import           Network.HTTP.Robots.Types
+import           Network.HTTP.Robots.Parser
 import           System.Directory
 import           Test.Hspec
 

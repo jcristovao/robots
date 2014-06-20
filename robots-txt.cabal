@@ -21,7 +21,9 @@ source-repository head
   location: git://github.com/meanpath/robots-txt.git
 
 library
-  exposed-modules:     Network.HTTP.Robots
+  exposed-modules:      Network.HTTP.Robots
+                      , Network.HTTP.Robots.Types
+                      , Network.HTTP.Robots.Parser
   -- other-modules:
   hs-source-dirs:         src
   build-depends:        base >= 4 && <= 5
@@ -31,7 +33,7 @@ library
                       , old-locale >= 1.0.0.5 && < 1.1
                       , containers >= 0.5.4 && < 0.6
                       , fingertree >= 0.1.1 && < 0.2
-                      , tree-util >= 0.4 && < 0.5
+                      --, tree-util >= 0.4 && < 0.5
                       , rosezipper >= 0.2
                       , filepath >= 1.1.0.2 && < 1.4
                       , split >= 0.2.2 && < 0.3
