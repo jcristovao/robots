@@ -15,6 +15,7 @@ import           Data.Char             (toUpper)
 import           Data.Time.Clock
 import           Data.Time.LocalTime()
 import           Data.Ratio
+import qualified Data.List       as L
 import qualified Data.IntervalMap.FingerTree as IM
 import qualified Data.Map.Strict as Map
 import qualified Data.Set        as Set
@@ -22,6 +23,9 @@ import qualified "containers" Data.Tree        as T
 import qualified Data.Tree.Zipper as Z
 import qualified System.FilePath  as FP
 import Data.Function
+import Data.List.Split
+
+import Debug.Trace
 
 -- http://www.conman.org/people/spc/robots2.html
 -- This was never actually accepted as a standard,
@@ -57,7 +61,7 @@ findPathInTree
   -> Z.TreePos Z.Full a
   -> [a]
   -> (Z.TreePos Z.Full a,[a])
-findPathInTree test pos []             = (pos,[])
+findPathInTree _    pos []             = (pos,[])
 findPathInTree test pos (p:pathPieces) =
   if test (Z.label pos) p
     then case Z.firstChild pos of
@@ -77,16 +81,18 @@ insertPathInTree pos [] = pos
 insertPathInTree pos pathPieces = let
   (partialPos,remain) = findPathInTree ((==) `on` fst) pos pathPieces
   in case remain of
-    []   -> Z.modifyTree (pathTreeJoinDir (snd . last $ pathPieces) ) partialPos
-    p:ps -> insertPathInTree' partialPos remain
+    [] -> Z.modifyTree (pathTreeJoinDir (snd . last $ pathPieces) ) partialPos
+    _  -> insertPathInTree' partialPos remain
 
-insertPathInTree' pos [] = pos
-insertPathInTree' pos (p:ps) = let
-  newPos = Z.insert (T.Node p []) (Z.children pos)
-  in insertPathInTree' newPos ps
+  where
+    insertPathInTree' :: Z.TreePos Z.Full a -> [a] -> Z.TreePos Z.Full a
+    insertPathInTree' =
+      foldl (\newPos p -> Z.insert (T.Node p []) (Z.children newPos))
 
+-- Zip filepaths with empty directive (Set.empty) except for the last,
+-- which gets the actual intended path directive
 zipWithLast :: PathDirective -> [FilePath] -> [PathDir]
-zipWithLast dir [] = []
+zipWithLast _   [] = []
 zipWithLast dir (x:[]) = [(x,Set.singleton dir)]
 zipWithLast dir xs =  zip (init xs) (repeat Set.empty)
                    ++ [(last xs,Set.singleton dir)]
@@ -104,6 +110,62 @@ buildPathTree dirs = let
 
 
   in Z.toTree . Z.root $ foldr proc initLoc (filterPathDirs dirs)
+
+splitAll :: Char -> String -> [String]
+splitAll _ [] = []
+splitAll c str = let
+  (st,rem) = L.break (=='*') str
+  in st:(case rem of
+            []     -> []
+            (x:xs) -> splitAll c xs)
+
+split' :: String -> String -> [String]
+split' x = split (onSublist x)
+
+asteriskCompare :: String -> String -> Bool
+asteriskCompare rstr istr = trace (show rstr ++ ":" ++ show istr) $ let
+  astLst = splitAll '*' rstr
+  in case (trace ("astLst: " ++ show astLst)) astLst of
+    -- single asterisk, match everything
+    [""] -> True
+    -- no asterisk, prefix match
+    (s:[]) -> s `L.isPrefixOf`  istr
+                  {-else concat sngl `L.isSuffixOf` istr-}
+    -- asterisk at start, and text then
+    (_:sngl) -> case trace ("sngl   : " ++ show sngl) sngl of
+      -- next, and asterisk, ignore it
+      [] -> True
+      -- just one element, match the end of the string
+      (_:[]) -> if last rstr == '*'
+                  then concat sngl `L.isInfixOf`  istr
+                  else concat sngl `L.isSuffixOf` istr
+      -- more than one element, match text for first element, and
+      -- recursive call asteriskCompare for the rest?
+      (x:xs) -> case split' x istr of
+        [""]    -> True -- TODO?
+        (_:[])  -> False -- No match
+        ("":_:yr)  -> asteriskCompare ('*':concat xs) (concat yr)
+        _ -> error "Should not happen on split'"
+
+
+
+findDirective :: PathsDirectives -> FilePath -> PathDir
+findDirective pds fp
+  = Z.label . fst
+  . findPathInTree ((==) `on` fst) (Z.fromTree pds)
+  -- NoIndex is a dummy variable, its not used here
+  . zipWithLast NoIndexD
+  $ FP.splitPath fp
+
+{-comparePaths :: PathDir -> PathDir -> Bool-}
+{-comparePaths (p1,_) (p2,_) = case p1 of-}
+  {-[] -> case p2 of-}
+    {-[] -> True-}
+    {-_  -> False-}
+  {-"*" -> True-}
+  {-p   -> case p2 of-}
+    {-"*" -> True-}
+    {-p'  -> if last p' =-}
 
 type TimeDirectives = IM.IntervalMap TimeInterval
 
