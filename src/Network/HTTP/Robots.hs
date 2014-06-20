@@ -417,6 +417,7 @@ directiveP = choice [ stringCI "Disallow:" >> skipSpace >>
 
 agentP :: Parser UserAgent
 agentP = do
+  stringCI "user-agent:"
   skipSpace
   ((string "*" >> return Wildcard) <|>
    (Literal  <$> tokenWithSpacesP)) <* skipSpace <* endOfLine <?> "agent"
