@@ -131,31 +131,31 @@ spec = do
 
 
 
-  {-describe "simple parsing" $ do-}
-    {-it "can read a token" $-}
-      {-parseOnly tokenP "foo" `shouldBe`-}
-        {-Right "foo"-}
-    {-it "can read a user agent" $-}
-      {-parseOnly agentP "User-agent: *\n" `shouldBe`-}
-        {-Right Wildcard-}
-    {-it "can read a specific user agent" $-}
-      {-parseOnly agentP "User-agent: Buzzbot\n" `shouldBe`-}
-        {-Right (Literal "Buzzbot")-}
-    {-it "can read allow directives" $-}
-      {-parseOnly directiveP "Allow: /\n" `shouldBe`-}
-        {-Right (Allow "/")-}
-    {-it "should read a full robots.txt" $-}
-      {-parseOnly robotP "User-agent: *\nDisallow: /\n"-}
-        {-`shouldBe` Right ([([Wildcard], [Disallow "/"])],[])-}
-    {-it "should cope with end-of-line comments" $-}
-      {-parseOnly robotP "User-agent: *\nDisallow: / # don't read my site\nAllow: /foo"-}
-        {-`shouldBe` Right ([([Wildcard], [Disallow "/", Allow "/foo"])],[])-}
-    {-it "can parse this stupid empty disallow line that the BNF suggests should be illegal" $-}
-      {-parseOnly robotP "User-agent: *\nDisallow:\n"-}
-        {-`shouldBe` Right ([([Wildcard], [Allow "/"])],[])-}
-    {-it "ignores the sitemap extension (and any other unrecognised text" $-}
-      {-parseOnly robotP "Sitemap: http:www.ebay.com/lst/PDP_US_main_index.xml\nUser-agent: *\nDisallow: /\n"-}
-        {-`shouldBe` Right ([([Wildcard], [Disallow "/"])], ["Sitemap: http:www.ebay.com/lst/PDP_US_main_index.xml"])-}
+  describe "simple parsing" $ do
+    it "can read a token" $
+      parseOnly tokenP "foo" `shouldBe`
+        Right "foo"
+    it "can read a user agent" $
+      parseOnly agentP "User-agent: *\n" `shouldBe`
+        Right Wildcard
+    it "can read a specific user agent" $
+      parseOnly agentP "User-agent: Buzzbot\n" `shouldBe`
+        Right (Literal "Buzzbot")
+    it "can read allow directives" $
+      parseOnly directiveP "Allow: /\n" `shouldBe`
+        Right (Allow "/")
+    it "should read a full robots.txt" $
+      parseOnly robotP "User-agent: *\nDisallow: /\n"
+        `shouldBe` Right ([([Wildcard], [Disallow "/"])],[])
+    it "should cope with end-of-line comments" $
+      parseOnly robotP "User-agent: *\nDisallow: / # don't read my site\nAllow: /foo"
+        `shouldBe` Right ([([Wildcard], [Disallow "/", Allow "/foo"])],[])
+    it "can parse this stupid empty disallow line that the BNF suggests should be illegal" $
+      parseOnly robotP "User-agent: *\nDisallow:\n"
+        `shouldBe` Right ([([Wildcard], [Allow "/"])],[])
+    it "ignores the sitemap extension (and any other unrecognised text" $
+      parseOnly robotP "Sitemap: http:www.ebay.com/lst/PDP_US_main_index.xml\nUser-agent: *\nDisallow: /\n"
+        `shouldBe` Right ([([Wildcard], [Disallow "/"])], ["Sitemap: http:www.ebay.com/lst/PDP_US_main_index.xml"])
 
 
 

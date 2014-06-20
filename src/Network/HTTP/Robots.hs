@@ -25,6 +25,8 @@ import qualified System.FilePath  as FP
 import Data.Function
 import Data.List.Split
 
+import Debug.Trace
+
 -- http://www.conman.org/people/spc/robots2.html
 -- This was never actually accepted as a standard,
 -- but some sites do use it.
@@ -45,9 +47,6 @@ type PathsDirectives = T.Tree PathDir
 
 emptyPathsDirectives :: PathsDirectives
 emptyPathsDirectives = T.Node ("/",Set.empty) []
-
-{-pathThreeAddDir :: PathsDirectives -> PathDirective -> PathsDirectives-}
-{-pathThreeAddDir (T.Node (p,dirs) subs) dir = T.Node (p,dirs ++ [dir]) subs-}
 
 pathTreeJoinDir :: Set.Set PathDirective -> PathsDirectives -> PathsDirectives
 pathTreeJoinDir dir (T.Node (p,dirs) subs) =
@@ -109,8 +108,32 @@ buildPathTree dirs = let
 
   in Z.toTree . Z.root $ foldr proc initLoc (filterPathDirs dirs)
 
+-- find position in tree that best matches given path
+findPathInTree'
+  :: (a -> a -> Bool)
+  -> Z.TreePos Z.Full a
+  -> [a]
+  -> (Z.TreePos Z.Full a,[a])
+findPathInTree' _    pos []             = (pos,[])
+findPathInTree' test pos (p:pathPieces) =
+  if test (Z.label pos) p
+    then case Z.firstChild pos of
+      Nothing     -> (pos,pathPieces)
+      Just newpos -> if null pathPieces
+                       then (pos,pathPieces)
+                       else findPathInTree' test newpos pathPieces
+    else case Z.next pos of
+      Nothing -> case Z.parent pos of
+                        Nothing -> (pos,p:pathPieces)
+                        Just pa -> (pa ,p:pathPieces)
+      Just sibpos -> findPathInTree' test sibpos (p:pathPieces)
+
+
+-- I should not be doing this...
+-- Match first string (with possible * matching first) with second string
+-- probably buggy, tested wih unit tests
 asteriskCompare :: String -> String -> Bool
-asteriskCompare rstr istr = let
+asteriskCompare rstr istr = trace ("asteriskCompare:" ++ show rstr ++ "::" ++ show istr) $ let
   astLst = split' "*" rstr
   in case astLst of
     -- single asterisk, match everything
@@ -150,7 +173,7 @@ asteriskCompare rstr istr = let
 findDirective :: PathsDirectives -> FilePath -> PathDir
 findDirective pds fp
   = Z.label . fst
-  . findPathInTree ((==) `on` fst) (Z.fromTree pds)
+  . findPathInTree' (flip asteriskCompare `on` fst) (Z.fromTree pds)
   -- NoIndex is a dummy variable, its not used here
   . zipWithLast NoIndexD
   $ FP.splitPath fp
