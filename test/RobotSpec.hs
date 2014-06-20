@@ -31,6 +31,13 @@ texts = unsafePerformIO $ do
   files <- filterM doesFileExist contents
   mapM (\x -> BS.readFile x >>= \c -> return (x,c  )) files
 
+frozen :: [(FilePath, BS.ByteString)]
+frozen = unsafePerformIO $ do
+  contents <- map ((dirname ++ "/frozen_examples/") ++)
+          <$> getDirectoryContents (dirname ++ "/frozen_examples")
+  files <- filterM doesFileExist contents
+  mapM (\x -> BS.readFile x >>= \c -> return (x,c  )) files
+
 
   -- this is just an ugly burn-in test - we collect examples of
   -- robots.txt and check we can read them all.
@@ -160,12 +167,6 @@ spec = do
         `shouldBe` Right ([([Wildcard], [Disallow "/"])], ["Sitemap: http:www.ebay.com/lst/PDP_US_main_index.xml"])
 
 
-
-
-
-
-
-
   describe "smoke test - check we can read all the robots.txt examples" $
     -- we should also verify if there were unparsed items
     forM_ texts $ \(name,text) ->
@@ -174,6 +175,35 @@ spec = do
           (\x -> 1 == length (rights [x])
               -- head is safe here if first condition is met
               && 0 == length (snd . head . rights $ [x]))
+
+  describe "test frozen amazon.de" $ do
+    -- Ugly hack for now
+    let (name,bs) = frozen !! 0
+        parsed = either (fail "should be able to parse amazon.de") id $ parseRobots bs
+        robots = either (fail "should be able to parse amazon.de") fst $ parseRobotsTxt bs
+    it "canAccess: should block /gp/cart" $
+      canAccess "*"  parsed "/gp/cart" `shouldBe` False
+    it "allowed  : should block /gp/cart" $
+      allowed "*"  robots "/gp/cart" `shouldBe` False
+
+    -- canAccess fails
+    {-it "canAccess: should allow /wishlist/universal-thruth" $-}
+      {-canAccess "*"  parsed "/wishlist/universal-thruth" `shouldBe` True-}
+    it "allowed  : should allow /wishlist/universal-thruth" $
+      allowed "*"  robots "/wishlist/universal-thruth" `shouldBe` True
+
+    it "canAccess: should block /gp/registry/wishlist/*/reserve" $
+      canAccess "*" parsed "/gp/registry/wishlist/abc/reserve" `shouldBe` False
+    it "allowed  : should block /gp/registry/wishlist/*/reserve" $
+      allowed "*" robots "/gp/registry/wishlist/abc/reserve" `shouldBe` False
+
+    it "canAccess: should block */b?ie=UTF8&node=1619732031" $
+      canAccess "*" parsed "/reserve/b?ie=UTF8&node=1619732031" `shouldBe` False
+    it "allowed  : should block */b?ie=UTF8&node=1619732031" $
+      allowed "*" robots "/reserve/b?ie=UTF8&node=1619732031" `shouldBe` False
+
+
+
 
   -- the behaviour here doesn't seem to be rigorously specified: it
   -- seems obvious that if * can access a resource but FooBot is

@@ -151,10 +151,11 @@ asteriskCompare rstr istr = trace ("asteriskCompare:" ++ show rstr ++ "::" ++ sh
 findDirective :: PathsDirectives -> FilePath -> PathDir
 findDirective pds fp
   = Z.label . fst
-  . findPathInTree' (flip asteriskCompare `on` fst) (Z.fromTree pds)
+  . findPathInTree' (asteriskCompare `on` fst) (Z.fromTree pds)
   -- NoIndex is a dummy variable, its not used here
   . zipWithLast NoIndexD
   $ FP.splitPath fp
+
 
 {-comparePaths :: PathDir -> PathDir -> Bool-}
 {-comparePaths (p1,_) (p2,_) = case p1 of-}
@@ -251,4 +252,26 @@ canAccess agent (robot,_) path = case stanzas of
 
           _ -> matchingDirective xs
 
+pathAllowed :: PathsDirectives -> FilePath -> Bool
+pathAllowed pds fp = let
+  (_,pd) = findDirective pds fp
+  in trace (show pd) $ Set.member AllowD pd && not (Set.member NoIndexD pd)
+
+lookAgentDirs :: String -> Map.Map UserAgents Directives -> Maybe Directives
+lookAgentDirs ag agentMap = let
+  indexes = Map.keys agentMap
+  relvIx  = L.find (Set.member (Literal (BS.pack ag))) indexes
+  ix = case relvIx of
+        Nothing -> L.find (Set.member Wildcard) indexes
+        Just ix'-> Just ix'
+  in join $ fmap (`Map.lookup` agentMap) ix
+
+
+
+allowed :: String -> Robot -> FilePath -> Bool
+allowed agent robot fp = let
+  dirs  = lookAgentDirs agent . directives $ robot
+  in case dirs of
+    Nothing     -> error "Should at least match *"
+    Just dirs'  -> pathAllowed (pathDirectives dirs') fp
 
