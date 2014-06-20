@@ -214,7 +214,14 @@ data Robot = Robot
   { directives :: Map.Map UserAgents Directives
   , siteMaps   :: [ByteString] -- TODO
   -- dependent on acceptance of patch for FingerTree
-  } deriving Show
+  }
+
+instance Show Robot where
+  show (Robot dirs _) =
+    Map.foldlWithKey (\acc k v -> acc
+                               ++ show k ++ "\n------\n"
+                               ++ (T.drawTree . fmap show . pathDirectives $ v)
+                               ++ "\n ~~~~~~~~~~~~~ \n") "" dirs
 
 type RobotTxt = (Robot,[Unparsable])
 
@@ -232,18 +239,19 @@ postProcessRobots (puds,unp) = (process puds, unp)
         userAgents = if Wildcard `elem` uas
                       then Set.singleton Wildcard
                       else Set.fromList uas
-        newDirs = foldr processDirs emptyDirectives dirs
+        {-newDirs = foldr processDirs emptyDirectives dirs-}
+        newDirs = Directives IM.empty (buildPathTree dirs)
       in Map.insert userAgents newDirs dirsMap
     -- process directives alone
-    processDirs :: Directive -> Directives -> Directives
-    processDirs dir dirs = case dir of
-      Allow p       -> insertPathDirective p AllowD       dirs
-      Disallow p    -> insertPathDirective p DisallowD    dirs
-      NoArchive p   -> insertPathDirective p NoArchiveD   dirs
-      NoSnippet p   -> insertPathDirective p NoSnippetD   dirs
-      NoTranslate p -> insertPathDirective p NoTranslateD dirs
-      NoIndex p     -> insertPathDirective p NoIndexD     dirs
-      CrawlDelay cd ti -> insertTimeDirective cd ti       dirs
+    {-processDirs :: Directive -> Directives -> Directives-}
+    {-processDirs dir dirs = case dir of-}
+      {-Allow p       -> insertPathDirective p AllowD       dirs-}
+      {-Disallow p    -> insertPathDirective p DisallowD    dirs-}
+      {-NoArchive p   -> insertPathDirective p NoArchiveD   dirs-}
+      {-NoSnippet p   -> insertPathDirective p NoSnippetD   dirs-}
+      {-NoTranslate p -> insertPathDirective p NoTranslateD dirs-}
+      {-NoIndex p     -> insertPathDirective p NoIndexD     dirs-}
+      {-CrawlDelay cd ti -> insertTimeDirective cd ti       dirs-}
 
 type RobotParsing = ([([UserAgent], [Directive])], [Unparsable])
 
@@ -283,12 +291,12 @@ extractPath dir = BS.unpack $ case dir of
 
 extractDir :: Directive -> PathDirective
 extractDir dir = case dir of
-  Allow _ -> AllowD
-  Disallow _ -> DisallowD
-  NoArchive _ -> NoArchiveD
-  NoSnippet _ -> NoSnippetD
+  Allow _       -> AllowD
+  Disallow _    -> DisallowD
+  NoArchive _   -> NoArchiveD
+  NoSnippet _   -> NoSnippetD
   NoTranslate _ -> NoTranslateD
-  NoIndex _ -> NoIndexD
+  NoIndex _     -> NoIndexD
   _ -> error "Unexpected directive (2)"
 
 

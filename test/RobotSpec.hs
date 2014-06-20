@@ -164,14 +164,14 @@ spec = do
 
 
 
-  {-describe "smoke test - check we can read all the robots.txt examples" $-}
-	{--- we should also verify if there were unparsed items-}
-    {-forM_ texts $ \(name,text) ->-}
-      {-it ("should parse " ++ name) $-}
-        {-parseRobots text `shouldSatisfy`-}
-          {-(\x -> 1 == length (rights [x])-}
-			  {--- head is safe here if first condition is met-}
-              {-&& 0 == length (snd . head . rights $ [x]))-}
+  describe "smoke test - check we can read all the robots.txt examples" $
+    -- we should also verify if there were unparsed items
+    forM_ texts $ \(name,text) ->
+      it ("should parse " ++ name) $
+        parseRobots text `shouldSatisfy`
+          (\x -> 1 == length (rights [x])
+              -- head is safe here if first condition is met
+              && 0 == length (snd . head . rights $ [x]))
 
   -- the behaviour here doesn't seem to be rigorously specified: it
   -- seems obvious that if * can access a resource but FooBot is
@@ -186,53 +186,53 @@ spec = do
   --
   -- is fit for treasons, stratagems and spoils.
   -- ganked from http://www.robotstxt.org/norobots-rfc.txt
-  {-describe "canAccess" $ do-}
-    {-let robot =-}
-          {-([([Literal "unhipbot"],-}
-             {-[Disallow "/"]),-}
-            {-([Literal "webcrawler", Literal "excite"],-}
-             {-[Allow "/"]),-}
-            {-([Wildcard],-}
-             {-[Disallow "/org/plans.html",-}
-              {-Allow "/org/",-}
-              {-Allow "/serv",-}
-              {-Allow "/~mak",-}
-              {-Disallow "/"])], [])-}
+  describe "canAccess" $ do
+    let robot =
+          ([([Literal "unhipbot"],
+             [Disallow "/"]),
+            ([Literal "webcrawler", Literal "excite"],
+             [Allow "/"]),
+            ([Wildcard],
+             [Disallow "/org/plans.html",
+              Allow "/org/",
+              Allow "/serv",
+              Allow "/~mak",
+              Disallow "/"])], [])
 
 
 
   --    unhipbot webcrawler other
   --             & excite
-    {-let tests = [("/",-}
-                  {-(False, True, False)),-}
-                 {-("/index.html",-}
-                  {-(False, True, False)),-}
-                 {-("/robots.txt",-}
-                  {-(True,      True,       True)),-}
-                 {-("/server.html",-}
-                  {-(False,       True,       True)),-}
-                 {-("/services/fast.html",-}
-                  {-(False,       True,       True)),-}
-                 {-("/services/slow.html",-}
-                  {-(False,       True,       True)),-}
-                 {-("/orgo.gif",-}
-                  {-(False,       True,       False)),-}
-                 {-("/org/about.html",-}
-                  {-(False,       True,       True)),-}
-                 {-("/org/plans.html",-}
-                  {-(False,       True,       False)),-}
-                 {-("/~jim/jim.html",-}
-                  {-(False,       True,       False)),-}
-                 {-("/~mak/mak.html",-}
-                  {-(False,       True,       True))]-}
-    {-forM_ tests $ \(path, (unhip, web_and_excite, other)) -> do-}
-      {-it ("unhipbot access to " ++ show path) $-}
-        {-canAccess "unhipbot" robot path `shouldBe` unhip-}
-      {-it ("webcrawler & excite access to " ++ show path) $ do-}
-        {-canAccess "webcrawler" robot path `shouldBe` web_and_excite-}
-        {-canAccess "excite" robot path `shouldBe` web_and_excite-}
-      {-it ("otherbot access to " ++ show path) $-}
-        {-canAccess "otherbot" robot path `shouldBe` other-}
+    let tests = [("/",
+                  (False, True, False)),
+                 ("/index.html",
+                  (False, True, False)),
+                 ("/robots.txt",
+                  (True,      True,       True)),
+                 ("/server.html",
+                  (False,       True,       True)),
+                 ("/services/fast.html",
+                  (False,       True,       True)),
+                 ("/services/slow.html",
+                  (False,       True,       True)),
+                 ("/orgo.gif",
+                  (False,       True,       False)),
+                 ("/org/about.html",
+                  (False,       True,       True)),
+                 ("/org/plans.html",
+                  (False,       True,       False)),
+                 ("/~jim/jim.html",
+                  (False,       True,       False)),
+                 ("/~mak/mak.html",
+                  (False,       True,       True))]
+    forM_ tests $ \(path, (unhip, web_and_excite, other)) -> do
+      it ("unhipbot access to " ++ show path) $
+        canAccess "unhipbot" robot path `shouldBe` unhip
+      it ("webcrawler & excite access to " ++ show path) $ do
+        canAccess "webcrawler" robot path `shouldBe` web_and_excite
+        canAccess "excite" robot path `shouldBe` web_and_excite
+      it ("otherbot access to " ++ show path) $
+        canAccess "otherbot" robot path `shouldBe` other
 
   -- describe "allowable" $ do
   --   let robot = [([Wildcard], [Disallow "/", Allow "/anyone"]),
@@ -251,10 +251,10 @@ spec = do
   --     canAccess "OtherSpecial"  robot "/only_special" `shouldBe` True
 
   {-describe "regressions" $-}
-    {-it "chooses the most specific user agent from helloworldweb" $ do-}
-      {-(Right hellobot) <- parseOnly robotP <$> liftIO (BS.readFile "./test/examples/helloworldweb2.com")-}
-      {-canAccess "Mozilla/5.0 (compatible; meanpathbot/1.0; +http://www.meanpath.com/meanpathbot.html)" hellobot "/" `shouldBe` False-}
-      {-canAccess "googlebot" hellobot "/" `shouldBe` True-}
+    it "chooses the most specific user agent from helloworldweb" $ do
+      (Right hellobot) <- parseOnly robotP <$> liftIO (BS.readFile "./test/examples/helloworldweb2.com")
+      canAccess "Mozilla/5.0 (compatible; meanpathbot/1.0; +http://www.meanpath.com/meanpathbot.html)" hellobot "/" `shouldBe` False
+      canAccess "googlebot" hellobot "/" `shouldBe` True
 
 
 
