@@ -124,28 +124,27 @@ split' x = split (onSublist x)
 
 asteriskCompare :: String -> String -> Bool
 asteriskCompare rstr istr = trace ("asteriskCompare:" ++ show rstr ++ ":" ++ show istr) $ let
-  astLst = splitAll '*' rstr
-  in case (trace ("astLst: " ++ show astLst)) astLst of
+  astLst = split' "*" rstr
+  in case astLst of
     -- single asterisk, match everything
-    [""] -> True
+    ["","*",""] -> True
     -- no asterisk, prefix match
     (s:[]) -> s `L.isPrefixOf`  istr
-                  {-else concat sngl `L.isSuffixOf` istr-}
-    -- asterisk at start, and text then
-    (st:sngl) ->
+    -- possible text, asterisk, and then more text
+    (st:_:sngl) ->
       if null st
-        then case trace ("sngl   : " ++ show sngl) sngl of
+        -- no prervious text (starts with asterisk)
+        then case sngl of
             -- next, and asterisk, ignore it
             [] -> True
             -- just one element, match the end of the string
-            (_:[]) -> if last rstr == '*'
-                        then concat sngl `L.isInfixOf`  istr
-                        else concat sngl `L.isSuffixOf` istr
+            (_:[]) -> concat sngl `L.isSuffixOf` istr
             -- more than one element, match text for first element, and
             -- recursive call asteriskCompare for the rest?
             (x:xs) -> case split' x istr of
               (_:[])  -> False -- No match
-              (_:_:yr)  -> trace "~~" $ asteriskCompare ('*':concat xs) (concat yr)
+              (_:_:yr)  -> asteriskCompare (concat xs)
+                                           (concat yr)
               _ -> error ("Should not happen on split' :" ++ show x ++ ":" ++ show xs)
         else case split' st istr of
           (_:[]) -> False -- No match

@@ -98,7 +98,7 @@ spec = do
       f "efcdabef"  `shouldBe` False
       f "_abcdef"   `shouldBe` False
       f "abcd__ef"  `shouldBe` True
-      {-f "abcd__efg" `shouldBe` True-}
+      f "abcd__efg" `shouldBe` True
 
 
 
