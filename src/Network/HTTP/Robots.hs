@@ -157,20 +157,6 @@ findDirective pds fp
   $ FP.splitPath fp
 
 
-{-comparePaths :: PathDir -> PathDir -> Bool-}
-{-comparePaths (p1,_) (p2,_) = case p1 of-}
-  {-[] -> case p2 of-}
-    {-[] -> True-}
-    {-_  -> False-}
-  {-"*" -> True-}
-  {-p   -> case p2 of-}
-    {-"*" -> True-}
-    {-p'  -> if last p' =-}
-
-insertPathDirective :: Path -> PathDirective -> Directives -> Directives
-insertPathDirective p d dirs = undefined
-  {-dirs { pathDirectives = Map.insertWith (++) p [d] (pathDirectives dirs) }-}
-
 -- crawldelay is a rational in seconds
 insertTimeDirective :: Rational -> TimeInterval -> Directives -> Directives
 insertTimeDirective cd ti dirs =
@@ -195,16 +181,6 @@ postProcessRobots (puds,unp) = (process puds, unp)
         {-newDirs = foldr processDirs emptyDirectives dirs-}
         newDirs = Directives IM.empty (buildPathTree dirs)
       in Map.insert userAgents newDirs dirsMap
-    -- process directives alone
-    {-processDirs :: Directive -> Directives -> Directives-}
-    {-processDirs dir dirs = case dir of-}
-      {-Allow p       -> insertPathDirective p AllowD       dirs-}
-      {-Disallow p    -> insertPathDirective p DisallowD    dirs-}
-      {-NoArchive p   -> insertPathDirective p NoArchiveD   dirs-}
-      {-NoSnippet p   -> insertPathDirective p NoSnippetD   dirs-}
-      {-NoTranslate p -> insertPathDirective p NoTranslateD dirs-}
-      {-NoIndex p     -> insertPathDirective p NoIndexD     dirs-}
-      {-CrawlDelay cd ti -> insertTimeDirective cd ti       dirs-}
 
 parseRobotsTxt :: ByteString -> Either String RobotTxt
 parseRobotsTxt = fmap postProcessRobots . parseRobots
