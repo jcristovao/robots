@@ -33,7 +33,8 @@ library
                       , fingertree >= 0.1.1 && < 0.2
                       , tree-util >= 0.4 && < 0.5
                       , rosezipper >= 0.2
-                      , filepath >= 1.1.0.2 && < 1.2
+                      , filepath >= 1.1.0.2 && < 1.4
+                      , split >= 0.2.2 && < 0.3
 
 test-suite tests
   type:            exitcode-stdio-1.0
@@ -45,7 +46,7 @@ test-suite tests
                    , QuickCheck
                    , bytestring
                    , robots-txt
-                   , directory
+                   , directory >= 1.2
                    , transformers
                    , attoparsec
                    , heredoc

@@ -123,7 +123,7 @@ split' :: String -> String -> [String]
 split' x = split (onSublist x)
 
 asteriskCompare :: String -> String -> Bool
-asteriskCompare rstr istr = trace (show rstr ++ ":" ++ show istr) $ let
+asteriskCompare rstr istr = trace ("asteriskCompare:" ++ show rstr ++ ":" ++ show istr) $ let
   astLst = splitAll '*' rstr
   in case (trace ("astLst: " ++ show astLst)) astLst of
     -- single asterisk, match everything
@@ -132,20 +132,28 @@ asteriskCompare rstr istr = trace (show rstr ++ ":" ++ show istr) $ let
     (s:[]) -> s `L.isPrefixOf`  istr
                   {-else concat sngl `L.isSuffixOf` istr-}
     -- asterisk at start, and text then
-    (_:sngl) -> case trace ("sngl   : " ++ show sngl) sngl of
-      -- next, and asterisk, ignore it
-      [] -> True
-      -- just one element, match the end of the string
-      (_:[]) -> if last rstr == '*'
-                  then concat sngl `L.isInfixOf`  istr
-                  else concat sngl `L.isSuffixOf` istr
-      -- more than one element, match text for first element, and
-      -- recursive call asteriskCompare for the rest?
-      (x:xs) -> case split' x istr of
-        [""]    -> True -- TODO?
-        (_:[])  -> False -- No match
-        ("":_:yr)  -> asteriskCompare ('*':concat xs) (concat yr)
-        _ -> error "Should not happen on split'"
+    (st:sngl) ->
+      if null st
+        then case trace ("sngl   : " ++ show sngl) sngl of
+            -- next, and asterisk, ignore it
+            [] -> True
+            -- just one element, match the end of the string
+            (_:[]) -> if last rstr == '*'
+                        then concat sngl `L.isInfixOf`  istr
+                        else concat sngl `L.isSuffixOf` istr
+            -- more than one element, match text for first element, and
+            -- recursive call asteriskCompare for the rest?
+            (x:xs) -> case split' x istr of
+              (_:[])  -> False -- No match
+              (_:_:yr)  -> trace "~~" $ asteriskCompare ('*':concat xs) (concat yr)
+              _ -> error ("Should not happen on split' :" ++ show x ++ ":" ++ show xs)
+        else case split' st istr of
+          (_:[]) -> False -- No match
+          ("":_:yr) -> trace ("st:" ++ show st ++ "sngl:" ++ show sngl ++
+                              "yr:" ++ show yr)
+                              asteriskCompare (L.dropWhile (/='*') rstr)
+                                              (concat yr)
+          _ -> False
 
 
 

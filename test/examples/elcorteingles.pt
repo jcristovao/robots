@@ -1,0 +1,18 @@
+User-agent: *
+Disallow: /homeIndexTop/Registo
+Disallow: /campanhas/2011/04/01_dias_incriveis/campanhas/promo_restauracao.asp
+Disallow: /http.//www.miyo.pt
+Disallow: /campanhas/2011/03/17_modaPrimavera/campanhas/promo_restauracao.asp
+Disallow: /campanhas/2011/04/01_fitness/campanhas/promo_restauracao.asp
+Disallow: /mapas_site/campanhas/promo_restauracao.asp
+Disallow: /campanhas/campanhas/promo_desporto.asp
+Disallow: /informacao/campanhas/promo_restauracao.asp
+Disallow: /servicos/port/campanhas/promo_restauracao.asp
+Disallow: /campanhas/campanhas/promo_restauracao.asp
+Disallow: /tops/campanhas/promo_restauracao.asp
+Disallow: /campanhas/2010_07_vinhoPorto/001.asphttp://
+Disallow: /campanhas/201101_saoValentim/venda.html
+Disallow: /downloads/FestaDescontosTextilLar_072008
+Disallow: /catalogos/
+Allow: /
+

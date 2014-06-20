@@ -1,0 +1,4 @@
+User-agent: *
+Disallow: /noticias/
+Disallow: /destaques/
+Disallow: /homepages/
