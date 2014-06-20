@@ -25,8 +25,6 @@ import qualified System.FilePath  as FP
 import Data.Function
 import Data.List.Split
 
-import Debug.Trace
-
 -- http://www.conman.org/people/spc/robots2.html
 -- This was never actually accepted as a standard,
 -- but some sites do use it.
@@ -111,19 +109,8 @@ buildPathTree dirs = let
 
   in Z.toTree . Z.root $ foldr proc initLoc (filterPathDirs dirs)
 
-splitAll :: Char -> String -> [String]
-splitAll _ [] = []
-splitAll c str = let
-  (st,rem) = L.break (=='*') str
-  in st:(case rem of
-            []     -> []
-            (x:xs) -> splitAll c xs)
-
-split' :: String -> String -> [String]
-split' x = split (onSublist x)
-
 asteriskCompare :: String -> String -> Bool
-asteriskCompare rstr istr = trace ("asteriskCompare:" ++ show rstr ++ ":" ++ show istr) $ let
+asteriskCompare rstr istr = let
   astLst = split' "*" rstr
   in case astLst of
     -- single asterisk, match everything
@@ -145,14 +132,18 @@ asteriskCompare rstr istr = trace ("asteriskCompare:" ++ show rstr ++ ":" ++ sho
               (_:[])  -> False -- No match
               (_:_:yr)  -> asteriskCompare (concat xs)
                                            (concat yr)
-              _ -> error ("Should not happen on split' :" ++ show x ++ ":" ++ show xs)
+              _ -> error ("Should not happen on asteriskCompare(1):" ++ show x ++ ":" ++ show xs)
         else case split' st istr of
           (_:[]) -> False -- No match
-          ("":_:yr) -> trace ("st:" ++ show st ++ "sngl:" ++ show sngl ++
-                              "yr:" ++ show yr)
-                              asteriskCompare (L.dropWhile (/='*') rstr)
-                                              (concat yr)
+          ("":_:yr) -> asteriskCompare (L.dropWhile (/='*') rstr)
+                                       (concat yr)
           _ -> False
+    _ -> error ("Should not happen in asteriskCompare(2):" ++ show astLst)
+
+  where
+    -- | Monomorphic version to avoid strange errors
+    split' :: String -> String -> [String]
+    split' x = split (onSublist x)
 
 
 

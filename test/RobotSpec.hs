@@ -34,6 +34,7 @@ texts = unsafePerformIO $ do
   -- robots.txt and check we can read them all.
 
 
+{-# ANN spec ("HLint: ignore Reduce duplication"::String) #-}
 spec :: Spec
 spec = do
   describe "basic primitives" $ do
@@ -99,6 +100,34 @@ spec = do
       f "_abcdef"   `shouldBe` False
       f "abcd__ef"  `shouldBe` True
       f "abcd__efg" `shouldBe` True
+      f "_abcdef_"  `shouldBe` False
+
+    it "can match *ab*cd*ef*" $ do
+      let f = asteriskCompare "*ab*cd*ef*"
+      f "abcdef"    `shouldBe` True
+      f "ab_cd_ef"  `shouldBe` True
+      f "abccdddef" `shouldBe` True
+      f "ab__cd__ef"`shouldBe` True
+      f "abcdefg"   `shouldBe` True
+      f ""          `shouldBe` False
+      f "efcdabef"  `shouldBe` False
+      f "_abcdef"   `shouldBe` True
+      f "abcd__ef"  `shouldBe` True
+      f "abcd__efg" `shouldBe` True
+      f "_abcdef_"  `shouldBe` True
+
+    it "can match *ab*" $ do
+      let f = asteriskCompare "*ab*"
+      f "ab"    `shouldBe` True
+      f "_ab"   `shouldBe` True
+      f "ab_"   `shouldBe` True
+      f "_ab_"  `shouldBe` True
+      f ""      `shouldBe` False
+      f "abab"  `shouldBe` True
+      f "aabb"  `shouldBe` True
+      f "*ab*"  `shouldBe` True
+
+
 
 
 
