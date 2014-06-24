@@ -97,9 +97,10 @@ data Robot = Robot
   }
 
 instance Show Robot where
-  show (Robot dirs _) =
+  show (Robot dirs when) =
     Map.foldlWithKey (\acc k v -> acc
                      ++ show k ++ "\n---------------------------\n"
+                     ++ "When: " ++ show when  ++ "\n"
                      ++ (foldl (\a x -> a ++ showPathDirective x ++ "\n") [] . pathDirectives $ v)
                      ++ "\n \n") "" dirs
 

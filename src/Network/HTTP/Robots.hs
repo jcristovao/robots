@@ -37,6 +37,7 @@ buildPathTree :: [Directive] -> PathsDirectives
 buildPathTree = map (\((r,_),d) -> (r,d))
               . L.sortBy (compare `on` (Down . snd . fst))
               . map transform
+              . filterPathDirectives
   where
     transform dir = (( compile (escRegex . extractPath $ dir) [dollar_endonly]
                      , BS.length . extractPath $ dir )
@@ -96,6 +97,8 @@ extractPathDirective dir = case dir of
   NoIndex _     -> NoIndexD
   _ -> error "Unexpected directive (2)"
 
+filterPathDirectives :: [Directive] -> [Directive]
+filterPathDirectives = filter (\d -> case d of CrawlDelay _ _ -> False ; _ -> True)
 
 escapeRegex :: String -> ByteString -> ByteString -> ByteString
 escapeRegex charList with' regex = foldl (escapeRegex' with') regex charList

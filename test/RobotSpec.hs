@@ -85,7 +85,7 @@ spec = do
               -- head is safe here if first condition is met
               && 0 == length (snd . head . rights $ [x]))
 
-  describe "test frozen amazon.de" $ do
+  describe "test amazon.de" $ do
     -- Ugly hack for now
     let (name,bs) = fromJust . L.find (("amazon.de" `L.isInfixOf`) . fst) $ frozen
         parsed = either (fail "should be able to parse amazon.de") id $ parseRobots bs
@@ -117,7 +117,7 @@ spec = do
     it "allowed  : should block */b?ie=UTF8&node=1619732031" $
       allowed "*" robots "/reserve/b?ie=UTF8&node=1619732031" `shouldBe` False
 
-  describe "test frozen wikipedia.org" $ do
+  describe "test wikipedia.org" $ do
     -- Ugly hack for now
     let (name,bs) = fromJust . L.find (("wikipedia.org" `L.isInfixOf`) . fst) $ frozen
         parsed = either (fail "should be able to parse wikipedia.org") id $ parseRobots bs
@@ -129,8 +129,7 @@ spec = do
     it "allowed  : should block / on user agent Mediapartners-GoogleNews" $
       allowed   "Mediapartners-GoogleNews"  robots "/" `shouldBe` False
 
-  describe "test frozen yandex.ru" $ do
-    -- Ugly hack for now
+  describe "test yandex.ru" $ do
     let (name,bs) = fromJust . L.find (("yandex.ru" `L.isInfixOf`) . fst) $ frozen
         parsed = either (fail "should be able to parse yandex.ru") id $ parseRobots bs
         robots = either (fail "should be able to parse yandex.ru") fst $ parseRobotsTxt bs
@@ -144,6 +143,17 @@ spec = do
       canAccess "*"  parsed "/a" `shouldBe` False
     it "allowed  : should bloc /a " $
       allowed   "*"  robots "/a" `shouldBe` False
+
+  describe "test sourceforge.net" $ do
+    let (name,bs) = fromJust . L.find (("sourceforge.net" `L.isInfixOf`) . fst) $ frozen
+        parsed = either (fail "should be able to parse sourceforge.net") id $ parseRobots bs
+        robots = either (fail "should be able to parse sourceforge.net") fst $ parseRobotsTxt bs
+    it "canAccess: should allow / " $
+      canAccess "*"  parsed "/" `shouldBe` True
+    it "allowed  : should allow / " $
+      trace (show robots) $ allowed   "*"  robots "/" `shouldBe` True
+
+
 
 
 
