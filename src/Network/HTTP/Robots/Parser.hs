@@ -156,6 +156,7 @@ commentsP = skipSpace >>
 
 tokenP :: Parser ByteString
 tokenP = skipSpace >> takeWhile1 (not . isSpace) <* skipSpace
+
 tokenWithSpacesP :: Parser ByteString
 tokenWithSpacesP = skipSpace >> takeWhile1 (not . (\c -> c == '#' || AT.isEndOfLine c))
 							 <* takeTill AT.isEndOfLine
@@ -180,7 +181,7 @@ parseRobots input = case parsed of
               . map strip
               . BS.lines
               -- worst way of handling windows newlines ever
-              . BS.filter (/= '\r')
+              . BS.map (\c -> if c == '\r' then '\n' else c)
               . dropUTF8BOM
               $ input
 
