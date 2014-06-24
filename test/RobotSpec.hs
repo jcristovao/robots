@@ -6,17 +6,17 @@ import           Network.HTTP.Robots.Types
 import           Network.HTTP.Robots.Parser
 import           System.Directory
 import           Test.Hspec
-import           Test.Hspec.Formatters
 
 import           Control.Applicative
 import           Control.Monad          (filterM, forM_)
-import           Control.Monad.IO.Class
 import           Data.Attoparsec.ByteString.Char8
 import qualified Data.ByteString.Char8  as BS
+import qualified Data.List as L
+import           Data.Maybe
 import           Data.Either
 import           System.IO.Unsafe       (unsafePerformIO)
 
-import           Debug.Trace
+import Debug.Trace
 
 -- apparently not a utility function.
 myIsLeft :: Either a b -> Bool
@@ -87,7 +87,7 @@ spec = do
 
   describe "test frozen amazon.de" $ do
     -- Ugly hack for now
-    let (name,bs) = frozen !! 0
+    let (name,bs) = fromJust . L.find (("amazon.de" `L.isInfixOf`) . fst) $ frozen
         parsed = either (fail "should be able to parse amazon.de") id $ parseRobots bs
         robots = either (fail "should be able to parse amazon.de") fst $ parseRobotsTxt bs
 
@@ -116,6 +116,34 @@ spec = do
       canAccess "*" parsed "/reserve/b?ie=UTF8&node=1619732031" `shouldBe` False
     it "allowed  : should block */b?ie=UTF8&node=1619732031" $
       allowed "*" robots "/reserve/b?ie=UTF8&node=1619732031" `shouldBe` False
+
+  describe "test frozen wikipedia.org" $ do
+    -- Ugly hack for now
+    let (name,bs) = fromJust . L.find (("wikipedia.org" `L.isInfixOf`) . fst) $ frozen
+        parsed = either (fail "should be able to parse wikipedia.org") id $ parseRobots bs
+        robots = either (fail "should be able to parse wikipedia.org") fst $ parseRobotsTxt bs
+
+    -- does not handle regexes on user agents
+    {-it "canAccess: should block / on user agent Mediapartners-GoogleNews" $-}
+      {-canAccess "Mediapartners-GoogleNews"  parsed "/" `shouldBe` False-}
+    it "allowed  : should block / on user agent Mediapartners-GoogleNews" $
+      allowed   "Mediapartners-GoogleNews"  robots "/" `shouldBe` False
+
+  describe "test frozen yandex.ru" $ do
+    -- Ugly hack for now
+    let (name,bs) = fromJust . L.find (("yandex.ru" `L.isInfixOf`) . fst) $ frozen
+        parsed = either (fail "should be able to parse yandex.ru") id $ parseRobots bs
+        robots = either (fail "should be able to parse yandex.ru") fst $ parseRobotsTxt bs
+
+    it "canAccess: should allow / " $
+      canAccess "*"  parsed "/" `shouldBe` True
+    it "allowed  : should allow / " $
+      allowed   "*"  robots "/" `shouldBe` True
+
+    it "canAccess: should block /a " $
+      canAccess "*"  parsed "/a" `shouldBe` False
+    it "allowed  : should bloc /a " $
+      allowed   "*"  robots "/a" `shouldBe` False
 
 
 

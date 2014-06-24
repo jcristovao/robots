@@ -99,13 +99,14 @@ strip = BS.reverse . BS.dropWhile (==' ') . BS.reverse . BS.dropWhile (==' ')
 
 robotP :: Parser RobotParsing
 robotP = do
-  (dirs, unparsable) <- partitionEithers <$> many (eitherP agentDirectiveP unparsableP) <?> "robot"
+  (dirs, unparsable) <- partitionEithers
+                    <$> many (eitherP agentDirectiveP unparsableP) <?> "robot"
   return (dirs, filter (/= "") unparsable)
 
 unparsableP :: Parser ByteString
 unparsableP = takeTill AT.isEndOfLine <* endOfLine -- char '\n'
 
-agentDirectiveP :: Parser ([UserAgent],[Directive])
+agentDirectiveP :: Parser ([ParsedUserAgent],[Directive])
 agentDirectiveP = (,) <$> many1 agentP <*> many1 directiveP <?> "agentDirective"
 
 
@@ -138,7 +139,7 @@ directiveP = choice [ stringCI "Disallow:" >> skipSpace >>
                     , NoIndex     <$> (stringCI "Noindex:"    >> skipSpace >> tokenP)
                     ] <* commentsP <?> "directive"
 
-agentP :: Parser UserAgent
+agentP :: Parser ParsedUserAgent
 agentP = do
   void $ stringCI "user-agent:"
   skipSpace

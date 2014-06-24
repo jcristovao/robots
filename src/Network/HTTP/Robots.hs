@@ -46,7 +46,7 @@ buildPathTree = map (\((r,_),d) -> (r,d))
 -- First match is returned (sorted by longuest path)
 findDirective :: PathsDirectives -> Path -> Maybe PathDirective
 findDirective pds fp = fmap snd
-                     . (find (\(r,_) -> matchBool r fp)) $ pds
+                     . (find (matchBool fp . fst)) $ pds
 
 
 -- crawldelay is a rational in seconds
@@ -57,17 +57,18 @@ insertTimeDirective cd ti dirs =
 postProcessRobots :: RobotParsing -> RobotTxt
 postProcessRobots (puds,unp) = (process puds, unp)
   where
-    process :: [([UserAgent],[Directive])] -> Robot
+    process :: [([ParsedUserAgent],[Directive])] -> Robot
     process puds' = Robot (foldr processUDs Map.empty puds') []
     -- process user directives
-    processUDs :: ([UserAgent],[Directive]) -> Map.Map UserAgents Directives
-                                            -> Map.Map UserAgents Directives
+    processUDs :: ([ParsedUserAgent],[Directive])
+               -> Map.Map UserAgents Directives
+               -> Map.Map UserAgents Directives
     processUDs (uas, dirs) dirsMap = let
         -- if a list of user agents has the Wildcard, then
         -- discard the remaining less specific elements.
         userAgents = if Wildcard `elem` uas
-                      then Set.singleton Wildcard
-                      else Set.fromList uas
+                      then [UA . toRegex $ "*"]
+                      else fmap (UA . toRegex . toBS) $ uas
         {-newDirs = foldr processDirs emptyDirectives dirs-}
         newDirs = Directives IM.empty (buildPathTree dirs)
       in Map.insert userAgents newDirs dirsMap
@@ -117,9 +118,12 @@ escRegex :: ByteString -> ByteString
 escRegex = escapeRegex "*" "."
          . escapeRegex "\\^?.+{[(|)]}" "\\"
 
+toRegex :: ByteString -> Regex
+toRegex rg = compile (escRegex rg) [dollar_endonly]
+
 -- | Match a robots.txt regular expression
-matchBool :: Regex -> ByteString -> Bool
-matchBool r bs = isJust (match r bs [])
+matchBool :: ByteString -> Regex -> Bool
+matchBool bs regex = isJust (match regex bs [])
 
 -- I lack the art to make this prettier.
 -- Currently does not take into account the canAccess :: ByteString -> RobotParsing -> Path -> Bool
@@ -136,12 +140,10 @@ canAccess agent (robot,_) path = case stanzas of
         isLiteralSubstring _ _ = False
         matchingDirective [] = True
         matchingDirective (x:xs) = case x of
-          Allow robot_path -> let
-            regex = compile (escRegex robot_path) [dollar_endonly]
-            in matchBool regex path || matchingDirective xs
-          Disallow robot_path -> let
-            regex = compile (escRegex robot_path) [dollar_endonly]
-            in not (matchBool regex path) && matchingDirective xs
+          Allow robot_path    ->      matchBool path (toRegex robot_path)
+                              || matchingDirective xs
+          Disallow robot_path -> not (matchBool path (toRegex robot_path))
+                              && matchingDirective xs
 
           _ -> matchingDirective xs
 
@@ -154,10 +156,10 @@ pathAllowed pds fp = case findDirective pds (BS.pack fp) of
 
 lookAgentDirs :: String -> Map.Map UserAgents Directives -> Maybe Directives
 lookAgentDirs ag agentMap = let
-  indexes = Map.keys agentMap
-  relvIx  = L.find (Set.member (Literal (BS.pack ag))) indexes
+  indexes =  Map.keys agentMap
+  relvIx  = L.find (isJust . L.find (matchBool (BS.pack ag) . getRx)) indexes
   ix = case relvIx of
-        Nothing -> L.find (Set.member Wildcard) indexes
+        Nothing -> L.find (isJust . L.find (matchBool "*" . getRx)) indexes
         Just ix'-> Just ix'
   in join $ fmap (`Map.lookup` agentMap) ix
 

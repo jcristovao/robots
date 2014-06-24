@@ -1,24 +1,30 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Network.HTTP.Robots.Types where
 
+import           Data.Ord
+import           Data.Function
 import           Data.ByteString.Char8 (ByteString)
 import           Data.Time.Clock
 import           Data.Time.LocalTime()
+import qualified Data.List as L
 import qualified Data.IntervalMap.FingerTree as IM
 import qualified Data.Map.Strict as Map
-import qualified Data.Set        as Set
 import Text.Regex.PCRE.Light
 
 ------------------------------------------------------------------------------
 -- Parsing types -------------------------------------------------------------
 ------------------------------------------------------------------------------
 
-type RobotParsing = ([([UserAgent], [Directive])], [Unparsable])
+type RobotParsing = ([([ParsedUserAgent], [Directive])], [Unparsable])
 
 type Unparsable = ByteString
 
-data UserAgent = Wildcard | Literal ByteString
-  deriving (Show,Eq,Ord)
+data ParsedUserAgent = Wildcard | Literal ByteString
+  deriving (Eq,Ord,Show)
+
+toBS :: ParsedUserAgent -> ByteString
+toBS Wildcard    = "*"
+toBS (Literal l) = l
 
 type Path = ByteString
 
@@ -48,7 +54,13 @@ data Directive = Allow Path
 -- but some sites do use it.
 type TimeInterval = IM.Interval DiffTime
 
-type UserAgents = Set.Set UserAgent
+newtype UserAgent  = UA { getRx :: Regex }
+  deriving (Eq,Show)
+
+instance Ord UserAgent where
+  compare = compare `on` Down . L.length . show
+
+type UserAgents = [UserAgent]
 
 data PathDirective = AllowD
                    | DisallowD
