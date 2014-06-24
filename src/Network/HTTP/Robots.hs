@@ -1,13 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE PackageImports #-}
 module Network.HTTP.Robots where
 
 import           Control.Applicative
 import           Control.Monad
+import           Data.Monoid ((<>))
 import           Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import           Data.List             (find)
-import           Data.Maybe            (catMaybes)
+import           Data.Maybe            (catMaybes,isJust)
 import           Data.Time.Clock
 import           Data.Time.LocalTime()
 import           Data.Ratio
@@ -23,6 +25,8 @@ import Data.List.Split
 
 import Network.HTTP.Robots.Types
 import Network.HTTP.Robots.Parser
+
+import Text.Regex.PCRE.Light
 
 import Debug.Trace
 
@@ -206,13 +210,35 @@ extractDir dir = case dir of
   _ -> error "Unexpected directive (2)"
 
 
+escapeRegex' :: ByteString -> ByteString -> Char -> ByteString
+escapeRegex' with regex what
+  | BS.null regex = regex
+  | otherwise     = let
+      what' = BS.singleton what
+      (before,afterwith) = BS.breakSubstring what' regex
+      in analyse before afterwith what
+  where
+    analyse bef af what
+      | BS.null af = regex
+      | otherwise  = bef <> with <> BS.take 1 af <> escapeRegex' with (BS.drop 1 af) what
+
+escapeRegex :: [Char] -> ByteString -> ByteString -> ByteString
+escapeRegex charList with regex = foldl (escapeRegex' with) regex charList
+
+escRegex :: ByteString -> ByteString
+escRegex = escapeRegex "*" "."
+         . escapeRegex "\\^?.+{[(|)]}" "\\"
+
+matchBool :: Regex -> ByteString -> Bool
+matchBool r bs = isJust (match r bs [])
+
 -- I lack the art to make this prettier.
 -- Currently does not take into account the canAccess :: ByteString -> RobotParsing -> Path -> Bool
 canAccess :: ByteString -> RobotParsing -> Path -> Bool
 canAccess _ _ "/robots.txt" = True -- special-cased
 canAccess agent (robot,_) path = case stanzas of
   [] -> True
-  ((_,directives):_) -> matchingDirective directives
+  ((_,directives):_) -> trace ("DIRECTIVES : " ++ show path ++ "\n\n") $ matchingDirective $ L.sort directives
   where stanzas = catMaybes [find (any (`isLiteralSubstring` agent) . fst) robot,
                              find (               (Wildcard `elem`) . fst) robot]
 
@@ -220,18 +246,20 @@ canAccess agent (robot,_) path = case stanzas of
         isLiteralSubstring (Literal a) us = a `BS.isInfixOf` us
         isLiteralSubstring _ _ = False
         matchingDirective [] = True
-        matchingDirective (x:xs) = case x of
-          Allow robot_path ->
-            robot_path `BS.isPrefixOf` path || matchingDirective xs
-          Disallow robot_path ->
-            not (robot_path `BS.isPrefixOf` path) && matchingDirective xs
+        matchingDirective (x:xs) = trace ("matchingDirective:" ++ show x) $ case x of
+          Allow robot_path -> trace ("xxxxx" ++ show x) $ let
+            regex = compile (escRegex robot_path) [dollar_endonly]
+            in (trace ("regex: " ++ show regex ++ "path:" ++ show path)) matchBool regex path || matchingDirective xs
+          Disallow robot_path -> let
+            regex = compile (escRegex robot_path) [dollar_endonly]
+            in not (matchBool regex path) && matchingDirective xs
 
           _ -> matchingDirective xs
 
 pathAllowed :: PathsDirectives -> FilePath -> Bool
 pathAllowed pds fp = let
   (_,pd) = findDirective pds fp
-  in trace (show pd) $ Set.member AllowD pd && not (Set.member NoIndexD pd)
+  in Set.member AllowD pd && not (Set.member NoIndexD pd)
 
 lookAgentDirs :: String -> Map.Map UserAgents Directives -> Maybe Directives
 lookAgentDirs ag agentMap = let

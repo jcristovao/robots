@@ -38,7 +38,7 @@ data Directive = Allow Path
                -- not used by Google, Yahoo or Live Search/Bing
                -- http://searchengineland.com/a-deeper-look-at-robotstxt-17573
                | NoIndex Path
-  deriving (Show,Eq)
+  deriving (Show,Eq,Ord)
 
 ------------------------------------------------------------------------------
 -- Processing types ----------------------------------------------------------

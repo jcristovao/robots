@@ -37,6 +37,7 @@ library
                       , rosezipper >= 0.2
                       , filepath >= 1.1.0.2 && < 1.4
                       , split >= 0.2.2 && < 0.3
+                      , pcre-light >= 0.4 && < 0.5
 
 test-suite tests
   type:            exitcode-stdio-1.0
