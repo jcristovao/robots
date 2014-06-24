@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PackageImports #-}
 module Network.HTTP.Robots.Types where
 
 import           Data.ByteString.Char8 (ByteString)
@@ -8,7 +7,7 @@ import           Data.Time.LocalTime()
 import qualified Data.IntervalMap.FingerTree as IM
 import qualified Data.Map.Strict as Map
 import qualified Data.Set        as Set
-import qualified "containers" Data.Tree        as T
+import Text.Regex.PCRE.Light
 
 ------------------------------------------------------------------------------
 -- Parsing types -------------------------------------------------------------
@@ -59,11 +58,14 @@ data PathDirective = AllowD
                    | NoIndexD
     deriving (Eq,Ord,Show)
 
-type PathDir = (String, Set.Set PathDirective)
-type PathsDirectives = T.Tree PathDir
+type PathDir = (Regex, PathDirective)
+type PathsDirectives = [PathDir]
+
+showPathDirective :: PathDir -> String
+showPathDirective (pregex,dirs) = show pregex ++ ": " ++ show dirs
 
 emptyPathsDirectives :: PathsDirectives
-emptyPathsDirectives = T.Node ("/",Set.empty) []
+emptyPathsDirectives = []
 
 type TimeDirectives = IM.IntervalMap TimeInterval
 
@@ -85,9 +87,9 @@ data Robot = Robot
 instance Show Robot where
   show (Robot dirs _) =
     Map.foldlWithKey (\acc k v -> acc
-                               ++ show k ++ "\n---------------------------\n"
-                               ++ (T.drawTree . fmap show . pathDirectives $ v)
-                               ++ "\n \n") "" dirs
+                     ++ show k ++ "\n---------------------------\n"
+                     ++ (foldl (\a x -> a ++ showPathDirective x ++ "\n") [] . pathDirectives $ v)
+                     ++ "\n \n") "" dirs
 
 type RobotTxt = (Robot,[Unparsable])
 

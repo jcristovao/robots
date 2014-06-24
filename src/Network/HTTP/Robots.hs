@@ -21,6 +21,7 @@ import qualified "containers" Data.Tree        as T
 import qualified Data.Tree.Zipper as Z
 import qualified System.FilePath  as FP
 import Data.Function
+import Data.Ord
 import Data.List.Split
 
 import Network.HTTP.Robots.Types
@@ -30,143 +31,28 @@ import Text.Regex.PCRE.Light
 
 import Debug.Trace
 
-pathTreeJoinDir :: Set.Set PathDirective -> PathsDirectives -> PathsDirectives
-pathTreeJoinDir dir (T.Node (p,dirs) subs) =
-                 T.Node (p,dirs `Set.union` dir) subs
-
--- find position in tree that best matches given path
-findPathInTree
-  :: (a -> a -> Bool)
-  -> Z.TreePos Z.Full a
-  -> [a]
-  -> (Z.TreePos Z.Full a,[a])
-findPathInTree _    pos []             = (pos,[])
-findPathInTree test pos (p:pathPieces) =
-  if test (Z.label pos) p
-    then case Z.firstChild pos of
-      Nothing     -> (pos,pathPieces)
-      Just newpos -> findPathInTree test newpos pathPieces
-    else case Z.next pos of
-      Nothing -> case Z.parent pos of
-                        Nothing -> (pos,p:pathPieces)
-                        Just pa -> (pa ,p:pathPieces)
-      Just sibpos -> findPathInTree test sibpos (p:pathPieces)
-
-insertPathInTree
-  :: Z.TreePos Z.Full (String, Set.Set PathDirective)
-  -> [(String, Set.Set PathDirective)]
-  -> Z.TreePos Z.Full (String, Set.Set PathDirective)
-insertPathInTree pos [] = pos
-insertPathInTree pos pathPieces = let
-  (partialPos,remain) = findPathInTree ((==) `on` fst) pos pathPieces
-  in case remain of
-    [] -> Z.modifyTree (pathTreeJoinDir (snd . last $ pathPieces) ) partialPos
-    _  -> insertPathInTree' partialPos remain
-
-  where
-    insertPathInTree' :: Z.TreePos Z.Full a -> [a] -> Z.TreePos Z.Full a
-    insertPathInTree' =
-      foldl (\newPos p -> Z.insert (T.Node p []) (Z.children newPos))
-
--- Zip filepaths with empty directive (Set.empty) except for the last,
--- which gets the actual intended path directive
-zipWithLast :: PathDirective -> [FilePath] -> [PathDir]
-zipWithLast _   [] = []
-zipWithLast dir (x:[]) = [(x,Set.singleton dir)]
-zipWithLast dir xs =  zip (init xs) (repeat Set.empty)
-                   ++ [(last xs,Set.singleton dir)]
-
+-- Entities should be sorted by path length (biggest first)
+-- http://blogs.bing.com/webmaster/2008/06/03/robots-exclusion-protocol-joining-together-to-provide-better-documentation/
 buildPathTree :: [Directive] -> PathsDirectives
-buildPathTree dirs = let
-  -- initial conditions
-  initLoc  = Z.fromTree emptyPathsDirectives
-  -- just path directives
-  filterPathDirs = filter (\d -> case d of CrawlDelay _ _ -> False ; _ -> True)
-  -- process paths
-  proc dir loc = Z.root $ insertPathInTree loc
-                        $ zipWithLast (extractDir dir)
-                                      (FP.splitPath . extractPath $ dir)
-
-
-  in Z.toTree . Z.root $ foldr proc initLoc (filterPathDirs dirs)
-
--- find position in tree that best matches given path
-findPathInTree'
-  :: (a -> a -> Bool)
-  -> Z.TreePos Z.Full a
-  -> [a]
-  -> (Z.TreePos Z.Full a,[a])
-findPathInTree' _    pos []             = (pos,[])
-findPathInTree' test pos (p:pathPieces) =
-  if test (Z.label pos) p
-    then case Z.firstChild pos of
-      Nothing     -> (pos,pathPieces)
-      Just newpos -> if null pathPieces
-                       then (pos,pathPieces)
-                       else findPathInTree' test newpos pathPieces
-    else case Z.next pos of
-      Nothing -> case Z.parent pos of
-                        Nothing -> (pos,p:pathPieces)
-                        Just pa -> (pa ,p:pathPieces)
-      Just sibpos -> findPathInTree' test sibpos (p:pathPieces)
-
-
--- I should not be doing this...
--- Match first string (with possible * matching first) with second string
--- probably buggy, tested wih unit tests
-asteriskCompare :: String -> String -> Bool
-asteriskCompare rstr istr = trace ("asteriskCompare:" ++ show rstr ++ "::" ++ show istr) $ let
-  astLst = split' "*" rstr
-  in case astLst of
-    -- single asterisk, match everything
-    ["","*",""] -> True
-    -- no asterisk, prefix match
-    (s:[]) -> s `L.isPrefixOf`  istr
-    -- possible text, asterisk, and then more text
-    (st:_:sngl) ->
-      if null st
-        -- no prervious text (starts with asterisk)
-        then case sngl of
-            -- next, and asterisk, ignore it
-            [] -> True
-            -- just one element, match the end of the string
-            (_:[]) -> concat sngl `L.isSuffixOf` istr
-            -- more than one element, match text for first element, and
-            -- recursive call asteriskCompare for the rest?
-            (x:xs) -> case split' x istr of
-              (_:[])  -> False -- No match
-              (_:_:yr)  -> asteriskCompare (concat xs)
-                                           (concat yr)
-              _ -> error ("Should not happen on asteriskCompare(1):" ++ show x ++ ":" ++ show xs)
-        else case split' st istr of
-          (_:[]) -> False -- No match
-          ("":_:yr) -> asteriskCompare (L.dropWhile (/='*') rstr)
-                                       (concat yr)
-          _ -> False
-    _ -> error ("Should not happen in asteriskCompare(2):" ++ show astLst)
-
+buildPathTree = map (\((r,_),d) -> (r,d))
+              . L.sortBy (compare `on` (Down . snd . fst))
+              . map transform
   where
-    -- | Monomorphic version to avoid strange errors
-    split' :: String -> String -> [String]
-    split' x = split (onSublist x)
+    transform dir = (( compile (escRegex . extractPath $ dir) [dollar_endonly]
+                     , BS.length . extractPath $ dir )
+                    , extractPathDirective dir)
 
 
-
-findDirective :: PathsDirectives -> FilePath -> PathDir
-findDirective pds fp
-  = Z.label . fst
-  . findPathInTree' (asteriskCompare `on` fst) (Z.fromTree pds)
-  -- NoIndex is a dummy variable, its not used here
-  . zipWithLast NoIndexD
-  $ FP.splitPath fp
+-- First match is returned (sorted by longuest path)
+findDirective :: PathsDirectives -> Path -> Maybe PathDirective
+findDirective pds fp = fmap snd
+                     . (find (\(r,_) -> matchBool r fp)) $ pds
 
 
 -- crawldelay is a rational in seconds
 insertTimeDirective :: Rational -> TimeInterval -> Directives -> Directives
 insertTimeDirective cd ti dirs =
   dirs { timeDirectives = IM.insert ti cd (timeDirectives dirs) }
-
-{-type UserAgentDirectives = Map.Map UserAgents Directives-}
 
 postProcessRobots :: RobotParsing -> RobotTxt
 postProcessRobots (puds,unp) = (process puds, unp)
@@ -189,8 +75,8 @@ postProcessRobots (puds,unp) = (process puds, unp)
 parseRobotsTxt :: ByteString -> Either String RobotTxt
 parseRobotsTxt = fmap postProcessRobots . parseRobots
 
-extractPath :: Directive -> FilePath
-extractPath dir = BS.unpack $ case dir of
+extractPath :: Directive -> Path
+extractPath dir = case dir of
   Allow p -> p
   Disallow p -> p
   NoArchive p -> p
@@ -199,8 +85,8 @@ extractPath dir = BS.unpack $ case dir of
   NoIndex p -> p
   _ -> error "Unexpected directive (1)"
 
-extractDir :: Directive -> PathDirective
-extractDir dir = case dir of
+extractPathDirective :: Directive -> PathDirective
+extractPathDirective dir = case dir of
   Allow _       -> AllowD
   Disallow _    -> DisallowD
   NoArchive _   -> NoArchiveD
@@ -210,25 +96,28 @@ extractDir dir = case dir of
   _ -> error "Unexpected directive (2)"
 
 
-escapeRegex' :: ByteString -> ByteString -> Char -> ByteString
-escapeRegex' with regex what
-  | BS.null regex = regex
-  | otherwise     = let
-      what' = BS.singleton what
-      (before,afterwith) = BS.breakSubstring what' regex
-      in analyse before afterwith what
+escapeRegex :: String -> ByteString -> ByteString -> ByteString
+escapeRegex charList with' regex = foldl (escapeRegex' with') regex charList
   where
-    analyse bef af what
-      | BS.null af = regex
-      | otherwise  = bef <> with <> BS.take 1 af <> escapeRegex' with (BS.drop 1 af) what
+    escapeRegex' :: ByteString -> ByteString -> Char -> ByteString
+    escapeRegex' with regx what
+      | BS.null regx = regx
+      | otherwise     = let
+          what' = BS.singleton what
+          (before,afterwith) = BS.breakSubstring what' regx
+          in analyse before afterwith what
+      where
+        analyse bef af wht
+          | BS.null af = regx
+          | otherwise  = bef <> with <> BS.take 1 af
+                      <> escapeRegex' with (BS.drop 1 af) wht
 
-escapeRegex :: [Char] -> ByteString -> ByteString -> ByteString
-escapeRegex charList with regex = foldl (escapeRegex' with) regex charList
-
+-- | Robots.txt regular expressions only feature * and $
 escRegex :: ByteString -> ByteString
 escRegex = escapeRegex "*" "."
          . escapeRegex "\\^?.+{[(|)]}" "\\"
 
+-- | Match a robots.txt regular expression
 matchBool :: Regex -> ByteString -> Bool
 matchBool r bs = isJust (match r bs [])
 
@@ -238,7 +127,7 @@ canAccess :: ByteString -> RobotParsing -> Path -> Bool
 canAccess _ _ "/robots.txt" = True -- special-cased
 canAccess agent (robot,_) path = case stanzas of
   [] -> True
-  ((_,directives):_) -> trace ("DIRECTIVES : " ++ show path ++ "\n\n") $ matchingDirective $ L.sort directives
+  ((_,directives):_) -> matchingDirective $ L.sort directives
   where stanzas = catMaybes [find (any (`isLiteralSubstring` agent) . fst) robot,
                              find (               (Wildcard `elem`) . fst) robot]
 
@@ -246,20 +135,22 @@ canAccess agent (robot,_) path = case stanzas of
         isLiteralSubstring (Literal a) us = a `BS.isInfixOf` us
         isLiteralSubstring _ _ = False
         matchingDirective [] = True
-        matchingDirective (x:xs) = trace ("matchingDirective:" ++ show x) $ case x of
-          Allow robot_path -> trace ("xxxxx" ++ show x) $ let
+        matchingDirective (x:xs) = case x of
+          Allow robot_path -> let
             regex = compile (escRegex robot_path) [dollar_endonly]
-            in (trace ("regex: " ++ show regex ++ "path:" ++ show path)) matchBool regex path || matchingDirective xs
+            in matchBool regex path || matchingDirective xs
           Disallow robot_path -> let
             regex = compile (escRegex robot_path) [dollar_endonly]
             in not (matchBool regex path) && matchingDirective xs
 
           _ -> matchingDirective xs
 
+-- | Test if a path is allowed with the given set of directives
 pathAllowed :: PathsDirectives -> FilePath -> Bool
-pathAllowed pds fp = let
-  (_,pd) = findDirective pds fp
-  in Set.member AllowD pd && not (Set.member NoIndexD pd)
+pathAllowed pds fp = case findDirective pds (BS.pack fp) of
+    Nothing     -> True
+    Just AllowD -> True
+    _           -> False
 
 lookAgentDirs :: String -> Map.Map UserAgents Directives -> Maybe Directives
 lookAgentDirs ag agentMap = let
@@ -270,12 +161,9 @@ lookAgentDirs ag agentMap = let
         Just ix'-> Just ix'
   in join $ fmap (`Map.lookup` agentMap) ix
 
-
-
 allowed :: String -> Robot -> FilePath -> Bool
 allowed agent robot fp = let
   dirs  = lookAgentDirs agent . directives $ robot
   in case dirs of
     Nothing     -> error "Should at least match *"
     Just dirs'  -> pathAllowed (pathDirectives dirs') fp
-

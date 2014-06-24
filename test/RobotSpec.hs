@@ -6,6 +6,7 @@ import           Network.HTTP.Robots.Types
 import           Network.HTTP.Robots.Parser
 import           System.Directory
 import           Test.Hspec
+import           Test.Hspec.Formatters
 
 import           Control.Applicative
 import           Control.Monad          (filterM, forM_)
@@ -14,6 +15,8 @@ import           Data.Attoparsec.ByteString.Char8
 import qualified Data.ByteString.Char8  as BS
 import           Data.Either
 import           System.IO.Unsafe       (unsafePerformIO)
+
+import           Debug.Trace
 
 -- apparently not a utility function.
 myIsLeft :: Either a b -> Bool
@@ -46,100 +49,6 @@ frozen = unsafePerformIO $ do
 {-# ANN spec ("HLint: ignore Reduce duplication"::String) #-}
 spec :: Spec
 spec = do
-  describe "basic primitives" $ do
-    it "can match a string withouth *" $ do
-      asteriskCompare "abc" "abc" `shouldBe` True
-      asteriskCompare "abc" "arc" `shouldBe` False
-
-    it "can match *" $ do
-      asteriskCompare "*" "" `shouldBe` True
-      asteriskCompare "*" " " `shouldBe` True
-
-    it "can match *abc" $ do
-      asteriskCompare "*abc" "abc"    `shouldBe` True
-      asteriskCompare "*abc" "deabc"  `shouldBe` True
-      asteriskCompare "*abc" "aabc"   `shouldBe` True
-      asteriskCompare "*abc" "abcabc" `shouldBe` True
-      asteriskCompare "*abc" "abcdabc"`shouldBe` True
-      asteriskCompare "*abc" "abc_"   `shouldBe` False
-      asteriskCompare "*abc" ""       `shouldBe` False
-
-    it "can match abc*" $ do
-      asteriskCompare "abc*" "abc"    `shouldBe` True
-      asteriskCompare "abc*" "deabc"  `shouldBe` False
-      asteriskCompare "abc*" "abcd"   `shouldBe` True
-      asteriskCompare "abc*" ""       `shouldBe` False
-      asteriskCompare "abc*" "abcabc" `shouldBe` True
-      asteriskCompare "abc*" "abcabcd"`shouldBe` True
-
-    it "can match ab*cd" $ do
-      let f = asteriskCompare "ab*cd"
-      f "abcd"    `shouldBe` True
-      f "abccd"   `shouldBe` True
-      f "abcdcd"  `shouldBe` True
-      f "ababcdcd"`shouldBe` True
-      f "acd"     `shouldBe` False
-      f ""        `shouldBe` False
-      f "cdab"    `shouldBe` False
-      f "cdabab"  `shouldBe` False
-      f "cdabcd"  `shouldBe` False
-
-    it "can match ab*cd*ef" $ do
-      let f = asteriskCompare "ab*cd*ef"
-      f "abcdef"    `shouldBe` True
-      f "ab_cd_ef"  `shouldBe` True
-      f "abccdddef" `shouldBe` True
-      f "ab__cd__ef"`shouldBe` True
-      f "abcdefg"   `shouldBe` False
-      f ""          `shouldBe` False
-      f "efcdabef"  `shouldBe` False
-      f "_abcdef"   `shouldBe` False
-      f "abcd__ef"  `shouldBe` True
-      f "abcd__efg" `shouldBe` False
-
-    it "can match ab*cd*ef*" $ do
-      let f = asteriskCompare "ab*cd*ef*"
-      f "abcdef"    `shouldBe` True
-      f "ab_cd_ef"  `shouldBe` True
-      f "abccdddef" `shouldBe` True
-      f "ab__cd__ef"`shouldBe` True
-      f "abcdefg"   `shouldBe` True
-      f ""          `shouldBe` False
-      f "efcdabef"  `shouldBe` False
-      f "_abcdef"   `shouldBe` False
-      f "abcd__ef"  `shouldBe` True
-      f "abcd__efg" `shouldBe` True
-      f "_abcdef_"  `shouldBe` False
-
-    it "can match *ab*cd*ef*" $ do
-      let f = asteriskCompare "*ab*cd*ef*"
-      f "abcdef"    `shouldBe` True
-      f "ab_cd_ef"  `shouldBe` True
-      f "abccdddef" `shouldBe` True
-      f "ab__cd__ef"`shouldBe` True
-      f "abcdefg"   `shouldBe` True
-      f ""          `shouldBe` False
-      f "efcdabef"  `shouldBe` False
-      f "_abcdef"   `shouldBe` True
-      f "abcd__ef"  `shouldBe` True
-      f "abcd__efg" `shouldBe` True
-      f "_abcdef_"  `shouldBe` True
-
-    it "can match *ab*" $ do
-      let f = asteriskCompare "*ab*"
-      f "ab"    `shouldBe` True
-      f "_ab"   `shouldBe` True
-      f "ab_"   `shouldBe` True
-      f "_ab_"  `shouldBe` True
-      f ""      `shouldBe` False
-      f "abab"  `shouldBe` True
-      f "aabb"  `shouldBe` True
-      f "*ab*"  `shouldBe` True
-
-
-
-
-
   describe "simple parsing" $ do
     it "can read a token" $
       parseOnly tokenP "foo" `shouldBe`
@@ -181,16 +90,22 @@ spec = do
     let (name,bs) = frozen !! 0
         parsed = either (fail "should be able to parse amazon.de") id $ parseRobots bs
         robots = either (fail "should be able to parse amazon.de") fst $ parseRobotsTxt bs
+
     it "canAccess: should block /gp/cart" $
       canAccess "*"  parsed "/gp/cart" `shouldBe` False
     it "allowed  : should block /gp/cart" $
       allowed "*"  robots "/gp/cart" `shouldBe` False
 
-    -- canAccess fails
     it "canAccess: should allow /wishlist/universal-thruth" $
       canAccess "*"  parsed "/wishlist/universal-thruth" `shouldBe` True
     it "allowed  : should allow /wishlist/universal-thruth" $
       allowed "*"  robots "/wishlist/universal-thruth" `shouldBe` True
+
+    it "canAccess: should block /wishlist/uu" $
+      canAccess "*"  parsed "/wishlist/uu" `shouldBe` False
+    it "allowed  : should allow /wishlist/uu" $
+      allowed "*"  robots "/wishlist/uu" `shouldBe` False
+
 
     it "canAccess: should block /gp/registry/wishlist/*/reserve" $
       canAccess "*" parsed "/gp/registry/wishlist/abc/reserve" `shouldBe` False
