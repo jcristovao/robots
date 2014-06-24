@@ -70,8 +70,12 @@ postProcessRobots (puds,unp) = (process puds, unp)
         userAgents = if Wildcard `elem` uas
                       then [UA . toRegex $ "*"]
                       else fmap (UA . toRegex . toBS) $ uas
-        {-newDirs = foldr processDirs emptyDirectives dirs-}
-        newDirs = Directives IM.empty (buildPathTree dirs)
+        builtTimeDirs dirs = foldr (\x -> let
+                                      (ti,r) = extractTimeDirective x
+                                      in IM.insert ti r) IM.empty
+                           . filterTimeDirectives
+                           $ dirs
+        newDirs = Directives (builtTimeDirs dirs) (buildPathTree dirs)
       in Map.insert userAgents newDirs dirsMap
 
 parseRobotsTxt :: ByteString -> Either String RobotTxt
@@ -99,6 +103,14 @@ extractPathDirective dir = case dir of
 
 filterPathDirectives :: [Directive] -> [Directive]
 filterPathDirectives = filter (\d -> case d of CrawlDelay _ _ -> False ; _ -> True)
+
+filterTimeDirectives :: [Directive] -> [Directive]
+filterTimeDirectives = filter (\d -> case d of CrawlDelay _ _ -> True ; _ -> False)
+
+extractTimeDirective :: Directive -> (TimeInterval, Rational)
+extractTimeDirective dir = case dir of
+  CrawlDelay d ti -> (ti,d)
+  _ -> error ("Unexpected time directive:" ++ show dir)
 
 escapeRegex :: String -> ByteString -> ByteString -> ByteString
 escapeRegex charList with' regex = foldl (escapeRegex' with') regex charList
