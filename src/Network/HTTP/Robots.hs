@@ -13,12 +13,11 @@ import           Data.Maybe            (catMaybes,isJust)
 import           Data.Time.Clock
 import           Data.Time.LocalTime()
 import           Data.Ratio
+import qualified Data.Foldable   as F
 import qualified Data.List       as L
 import qualified Data.IntervalMap.FingerTree as IM
 import qualified Data.Map.Strict as Map
 import qualified Data.Set        as Set
-import qualified "containers" Data.Tree        as T
-import qualified Data.Tree.Zipper as Z
 import qualified System.FilePath  as FP
 import Data.Function
 import Data.Ord
@@ -169,6 +168,14 @@ pathAllowed pds fp = case findDirective pds (BS.pack fp) of
     Just AllowD -> True
     _           -> False
 
+-- | Test if a path is allowed with the given set of directives
+timeAllowed :: IM.IntervalMap DiffTime Rational -> UTCTime -> Bool
+timeAllowed tds t
+  | isNull tds = True
+  | otherwise  = case IM.search (utctDayTime t) tds of
+                    [] -> False
+                    _  -> True
+
 lookAgentDirs :: String -> Map.Map UserAgents Directives -> Maybe Directives
 lookAgentDirs ag agentMap = let
   indexes =  Map.keys agentMap
@@ -184,3 +191,24 @@ allowed agent robot fp = let
   in case dirs of
     Nothing     -> error "Should at least match *"
     Just dirs'  -> pathAllowed (pathDirectives dirs') fp
+
+allowedNow :: UTCTime -> String -> Robot -> FilePath -> Bool
+allowedNow utctime agent robot fp = let
+  dirs = lookAgentDirs agent . directives $ robot
+  in case dirs of
+    Nothing     -> error "Should at least match *"
+    Just dirs'  -> pathAllowed (pathDirectives dirs') fp
+              &&   timeAllowed (timeDirectives dirs') utctime
+
+allowedNowIO :: String -> Robot -> FilePath -> IO Bool
+allowedNowIO agent robot fp = (\u -> allowedNow u agent robot fp) <$> getCurrentTime
+
+-- IsNull for types that do not provide it,
+-- neither do they provide an Eq instances.
+-- See http://hackage.haskell.org/package/IsNull
+-- I avoid the import since we only really need this
+isNull :: (F.Foldable f) => f a -> Bool
+isNull = F.foldr (\_ _ -> False) True
+
+
+

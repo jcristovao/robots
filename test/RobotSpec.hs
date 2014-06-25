@@ -14,6 +14,7 @@ import qualified Data.ByteString.Char8  as BS
 import qualified Data.List as L
 import           Data.Maybe
 import           Data.Either
+import           Data.Time.Clock
 import           System.IO.Unsafe       (unsafePerformIO)
 
 import Debug.Trace
@@ -87,7 +88,7 @@ spec = do
 
   describe "test amazon.de" $ do
     -- Ugly hack for now
-    let (name,bs) = fromJust . L.find (("amazon.de" `L.isInfixOf`) . fst) $ frozen
+    let bs = snd . fromJust . L.find (("amazon.de" `L.isInfixOf`) . fst) $ frozen
         parsed = either (fail "should be able to parse amazon.de") id $ parseRobots bs
         robots = either (fail "should be able to parse amazon.de") fst $ parseRobotsTxt bs
 
@@ -119,8 +120,8 @@ spec = do
 
   describe "test wikipedia.org" $ do
     -- Ugly hack for now
-    let (name,bs) = fromJust . L.find (("wikipedia.org" `L.isInfixOf`) . fst) $ frozen
-        parsed = either (fail "should be able to parse wikipedia.org") id $ parseRobots bs
+    let bs = snd . fromJust . L.find (("wikipedia.org" `L.isInfixOf`) . fst) $ frozen
+        {-parsed = either (fail "should be able to parse wikipedia.org") id $ parseRobots bs-}
         robots = either (fail "should be able to parse wikipedia.org") fst $ parseRobotsTxt bs
 
     -- does not handle regexes on user agents
@@ -130,7 +131,7 @@ spec = do
       allowed   "Mediapartners-GoogleNews"  robots "/" `shouldBe` False
 
   describe "test yandex.ru" $ do
-    let (name,bs) = fromJust . L.find (("yandex.ru" `L.isInfixOf`) . fst) $ frozen
+    let bs = snd . fromJust . L.find (("yandex.ru" `L.isInfixOf`) . fst) $ frozen
         parsed = either (fail "should be able to parse yandex.ru") id $ parseRobots bs
         robots = either (fail "should be able to parse yandex.ru") fst $ parseRobotsTxt bs
 
@@ -145,15 +146,31 @@ spec = do
       allowed   "*"  robots "/a" `shouldBe` False
 
   describe "test sourceforge.net" $ do
-    let (name,bs) = fromJust . L.find (("sourceforge.net" `L.isInfixOf`) . fst) $ frozen
+    let bs = snd . fromJust . L.find (("sourceforge.net" `L.isInfixOf`) . fst) $ frozen
         parsed = either (fail "should be able to parse sourceforge.net") id $ parseRobots bs
         robots = either (fail "should be able to parse sourceforge.net") fst $ parseRobotsTxt bs
     it "canAccess: should allow / " $
       canAccess "*"  parsed "/" `shouldBe` True
     it "allowed  : should allow / " $
-      trace (show robots) $ allowed   "*"  robots "/" `shouldBe` True
+      allowed   "*"  robots "/" `shouldBe` True
 
+  describe "test paypal.com" $ do
+    let bs = snd . fromJust . L.find (("paypal.com" `L.isInfixOf`) . fst) $ frozen
+        parsed = either (fail "should be able to parse paypal.com") id $ parseRobots bs
+        robots = either (fail "should be able to parse paypal.com") fst $ parseRobotsTxt bs
 
+    it "allowedNowIO: should access / based on current time" $ do
+      ct <- utctDayTime <$> getCurrentTime
+      let b = ct >= (2*60*60) && ct <= (12*60*60)
+      allowedNowIO "*"  robots "/" `shouldReturn` b
+
+    it "allowedNow: should access / based on current time" $ do
+      ct <- getCurrentTime
+      let cs = utctDayTime ct
+      let b = cs >= (2*60*60) && cs <= (12*60*60)
+      allowedNow ct "*"  robots "/" `shouldBe` b
+
+      {-allowedNowIO "*"  robots "/" `shouldReturn` b-}
 
 
 
