@@ -156,7 +156,6 @@ spec = do
 
   describe "test paypal.com" $ do
     let bs = snd . fromJust . L.find (("paypal.com" `L.isInfixOf`) . fst) $ frozen
-        parsed = either (fail "should be able to parse paypal.com") id $ parseRobots bs
         robots = either (fail "should be able to parse paypal.com") fst $ parseRobotsTxt bs
 
     it "allowedNowIO: should access / based on current time" $ do

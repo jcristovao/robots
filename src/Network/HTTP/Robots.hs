@@ -8,13 +8,14 @@ import           Data.Monoid ((<>))
 import           Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import           Data.List             (find)
-import           Data.Maybe            (catMaybes,isJust)
+import           Data.Maybe            (catMaybes,isJust,fromMaybe, fromJust)
 import           Data.Time.Clock
 import           Data.Time.LocalTime()
 import           Data.Ratio
 import qualified Data.Foldable   as F
 import qualified Data.List       as L
 import qualified Data.IntervalMap.FingerTree as IM
+import qualified Data.FingerTree             as FT
 import qualified Data.Map.Strict as Map
 import qualified Data.Set        as Set
 import qualified System.FilePath  as FP
@@ -51,11 +52,14 @@ findDirective pds fp = fmap snd
 -- crawldelay is a rational in seconds
 insertTimeDirective :: Rational -> TimeInterval -> Directives -> Directives
 insertTimeDirective cd ti dirs = case timeDirectives dirs of
-  Always      -> dirs
+  Always      -> dirs { timeDirectives = case ti of
+                        AnyTime  -> Always
+                        JustIn i -> JustNow (IM.singleton i cd)
+                       }
   JustNow im  -> dirs { timeDirectives = case ti of
-                    AnyTime  -> Always
-                    JustIn i -> JustNow (IM.insert i cd im)
-                    }
+                        AnyTime  -> Always
+                        JustIn i -> JustNow (IM.insert i cd im)
+                      }
 
 postProcessRobots :: RobotParsing -> RobotTxt
 postProcessRobots (puds,unp) = (process puds, unp)
@@ -72,7 +76,7 @@ postProcessRobots (puds,unp) = (process puds, unp)
         userAgents = if Wildcard `elem` uas
                       then [UA . toRegex $ "*"]
                       else fmap (UA . toRegex . toBS) $ uas
-        newDirs' = Directives (JustNow IM.empty) (buildPathTree dirs)
+        newDirs' = Directives emptyTimeDirectives (buildPathTree dirs)
         newDirs  = foldr (\x acc -> let
                               (ti,r) = extractTimeDirective x
                               in insertTimeDirective r ti acc)
@@ -179,6 +183,11 @@ pathAllowed pds fp = case findDirective pds (BS.pack fp) of
                     {-[] -> False-}
                     {-_  -> True-}
 
+hasTimeOfDayRestrictions :: String -> Robot -> Bool
+hasTimeOfDayRestrictions agent robot =
+  case timeDirectives . getDirectives agent $ robot of
+    Always -> False
+    _      -> True
 
 -- | Test if a path is allowed with the given set of directives
 timeAllowed :: TimeDirectives -> UTCTime -> Bool
@@ -198,20 +207,18 @@ lookAgentDirs ag agentMap = let
         Just ix'-> Just ix'
   in join $ fmap (`Map.lookup` agentMap) ix
 
+getDirectives :: String -> Robot -> Directives
+getDirectives agent =
+  fromMaybe (error "Should at least match * (1)") . lookAgentDirs agent . directives
+
 allowed :: String -> Robot -> FilePath -> Bool
-allowed agent robot fp = let
-  dirs  = lookAgentDirs agent . directives $ robot
-  in case dirs of
-    Nothing     -> error "Should at least match * (1)"
-    Just dirs'  -> pathAllowed (pathDirectives dirs') fp
+allowed agent robot = pathAllowed (pathDirectives . getDirectives agent $ robot)
 
 allowedNow :: UTCTime -> String -> Robot -> FilePath -> Bool
-allowedNow utctime agent robot fp = let
-  dirs = lookAgentDirs agent . directives $ robot
-  in case dirs of
-    Nothing     -> error "Should at least match * (2)"
-    Just dirs'  -> pathAllowed (pathDirectives dirs') fp
-              &&   timeAllowed (timeDirectives dirs') utctime
+allowedNow utctime agent robot fp =
+     pathAllowed (pathDirectives getDirectives' ) fp
+  && timeAllowed (timeDirectives getDirectives' ) utctime
+    where getDirectives' = getDirectives agent robot
 
 {-allowedWhen :: String -> Robot -> CrawlWhen-}
 {-allowedNow agent robot = let-}
@@ -230,5 +237,54 @@ allowedNowIO agent robot fp = (\u -> allowedNow u agent robot fp) <$> getCurrent
 isNull :: (F.Foldable f) => f a -> Bool
 isNull = F.foldr (\_ _ -> False) True
 
+-- | Get all limits of a set of intervals, sorted.
+intervalMapToLimits :: IM.IntervalMap Int a -> [Int]
+intervalMapToLimits (IM.IntervalMap ft) = L.sort
+                                        . concatMap (fromInterval . fromNode)
+                                        . F.toList $ ft
+  where fromNode (IM.Node i _) = i
+        fromInterval (IM.Interval x y) = [x,y]
+
+getValueBy
+  :: Ord a
+  => ([a] -> a)
+  -> IM.IntervalMap Int a
+  -> Int
+  -> Maybe a
+getValueBy f im point = l2m f . map snd . IM.search point $ im
+  where l2m g l = case l of
+                  [] -> Nothing
+                  xs -> Just . g $ l
+
+getLargestDelay :: Ord a => IM.IntervalMap Int a -> Int -> Maybe a
+getLargestDelay = getValueBy maximum
+
+-- Interval start (I0) or end (I1)
+data IC = I0 Int | I1 Int
+
+getInt :: IC -> Int
+getInt (I0 i) = i
+getInt (I1 i) = i
+
+-- index by max, choose between ul and ul + 1
+-- may be worth considering same value interval merging
+mergeIntervalsWith
+  :: Ord a
+  => (IM.IntervalMap Int a -> Int -> Maybe a)
+  -> IM.IntervalMap Int a
+  -> IM.IntervalMap Int a
+mergeIntervalsWith criteria im' = let
+  points = intervalMapToLimits im'
+  in case points of
+    []     -> IM.empty
+    (i:is) -> snd $
+              foldl (\(j,im) p -> case j of
+                                    I0 ul -> let v  = fromJust . criteria im' $ ul + 1
+                                                 nim= IM.insert (IM.Interval ul p) v im
+                                             in case criteria im' (p+1) of
+                                                     Nothing -> (I1 p,nim)
+                                                     Just _  -> (I0 p,nim)
+                                    I1 _ -> (I0 p,im)
 
 
+                    ) (I0 i,IM.empty) is
