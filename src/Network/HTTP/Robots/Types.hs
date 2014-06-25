@@ -52,7 +52,8 @@ data Directive = Allow Path
 -- http://www.conman.org/people/spc/robots2.html
 -- This was never actually accepted as a standard,
 -- but some sites do use it.
-type TimeInterval = IM.Interval DiffTime
+data TimeInterval = AnyTime | JustIn (IM.Interval DiffTime)
+  deriving (Eq, Ord, Show)
 
 newtype UserAgent  = UA { getRx :: Regex }
   deriving (Eq,Show)
@@ -79,16 +80,21 @@ showPathDirective (pregex,dirs) = show pregex ++ ": " ++ show dirs
 emptyPathsDirectives :: PathsDirectives
 emptyPathsDirectives = []
 
-type TimeDirectives = IM.IntervalMap TimeInterval
+data TimeDirectives = Always
+                    | JustNow (IM.IntervalMap DiffTime Rational)
+  deriving (Show)
+
+emptyTimeDirectives :: TimeDirectives
+emptyTimeDirectives = JustNow IM.empty
 
 data Directives = Directives
-  { timeDirectives :: IM.IntervalMap DiffTime Rational
+  { timeDirectives :: TimeDirectives
   , pathDirectives :: PathsDirectives
   -- dependent on acceptance of patch for FingerTree
   } deriving Show
 
 emptyDirectives :: Directives
-emptyDirectives = Directives IM.empty emptyPathsDirectives
+emptyDirectives = Directives emptyTimeDirectives emptyPathsDirectives
 
 data Robot = Robot
   { directives :: Map.Map UserAgents Directives

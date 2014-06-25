@@ -60,13 +60,12 @@ parseTimeInterval = do
   (hours_start, mins_start) <- parseHourMinute
   void         $ (skipSpace >> char '-' >> skipSpace) <|> skipSpace
   (hours_end  , mins_end  ) <- parseHourMinute
-  return $
+  return . JustIn $
     IM.Interval (secondsToDiffTime (hours_start * 60 * 60 + mins_start * 60))
                 (secondsToDiffTime (hours_end   * 60 * 60 + mins_end   * 60))
 
 allDay :: TimeInterval
-allDay = IM.Interval (secondsToDiffTime 0)
-                     (secondsToDiffTime (24*60*60)) -- because of leap seconds
+allDay = AnyTime
 
 parseRequestRate :: Parser Directive
 parseRequestRate = do

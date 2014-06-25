@@ -1,6 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE OverloadedLists #-}
-{-# LANGUAGE PackageImports #-}
 module Network.HTTP.Robots where
 
 import           Control.Applicative
@@ -51,8 +50,12 @@ findDirective pds fp = fmap snd
 
 -- crawldelay is a rational in seconds
 insertTimeDirective :: Rational -> TimeInterval -> Directives -> Directives
-insertTimeDirective cd ti dirs =
-  dirs { timeDirectives = IM.insert ti cd (timeDirectives dirs) }
+insertTimeDirective cd ti dirs = case timeDirectives dirs of
+  Always      -> dirs
+  JustNow im  -> dirs { timeDirectives = case ti of
+                    AnyTime  -> Always
+                    JustIn i -> JustNow (IM.insert i cd im)
+                    }
 
 postProcessRobots :: RobotParsing -> RobotTxt
 postProcessRobots (puds,unp) = (process puds, unp)
@@ -69,12 +72,12 @@ postProcessRobots (puds,unp) = (process puds, unp)
         userAgents = if Wildcard `elem` uas
                       then [UA . toRegex $ "*"]
                       else fmap (UA . toRegex . toBS) $ uas
-        builtTimeDirs dirs = foldr (\x -> let
-                                      (ti,r) = extractTimeDirective x
-                                      in IM.insert ti r) IM.empty
-                           . filterTimeDirectives
-                           $ dirs
-        newDirs = Directives (builtTimeDirs dirs) (buildPathTree dirs)
+        newDirs' = Directives (JustNow IM.empty) (buildPathTree dirs)
+        newDirs  = foldr (\x acc -> let
+                              (ti,r) = extractTimeDirective x
+                              in insertTimeDirective r ti acc)
+                          newDirs' (filterTimeDirectives dirs)
+
       in Map.insert userAgents newDirs dirsMap
 
 parseRobotsTxt :: ByteString -> Either String RobotTxt
@@ -169,10 +172,20 @@ pathAllowed pds fp = case findDirective pds (BS.pack fp) of
     _           -> False
 
 -- | Test if a path is allowed with the given set of directives
-timeAllowed :: IM.IntervalMap DiffTime Rational -> UTCTime -> Bool
-timeAllowed tds t
-  | isNull tds = True
-  | otherwise  = case IM.search (utctDayTime t) tds of
+{-timeInterval :: IM.IntervalMap DiffTime Rational -> UTCTime -> Bool-}
+{-timeAllowed tds t-}
+  {-| isNull tds = True-}
+  {-| otherwise  = case IM.search (utctDayTime t) tds of-}
+                    {-[] -> False-}
+                    {-_  -> True-}
+
+
+-- | Test if a path is allowed with the given set of directives
+timeAllowed :: TimeDirectives -> UTCTime -> Bool
+timeAllowed Always _ = True
+timeAllowed (JustNow tim) t
+  | isNull tim = False
+  | otherwise  = case IM.search (utctDayTime t) tim of
                     [] -> False
                     _  -> True
 
@@ -189,16 +202,23 @@ allowed :: String -> Robot -> FilePath -> Bool
 allowed agent robot fp = let
   dirs  = lookAgentDirs agent . directives $ robot
   in case dirs of
-    Nothing     -> error "Should at least match *"
+    Nothing     -> error "Should at least match * (1)"
     Just dirs'  -> pathAllowed (pathDirectives dirs') fp
 
 allowedNow :: UTCTime -> String -> Robot -> FilePath -> Bool
 allowedNow utctime agent robot fp = let
   dirs = lookAgentDirs agent . directives $ robot
   in case dirs of
-    Nothing     -> error "Should at least match *"
+    Nothing     -> error "Should at least match * (2)"
     Just dirs'  -> pathAllowed (pathDirectives dirs') fp
               &&   timeAllowed (timeDirectives dirs') utctime
+
+{-allowedWhen :: String -> Robot -> CrawlWhen-}
+{-allowedNow agent robot = let-}
+  {-dirs = lookAgentDirs agent . directives $ robot-}
+  {-in case dirs of-}
+    {-Nothing -> error "Should at least match * (3)"-}
+    {-Just dirs' -> case-}
 
 allowedNowIO :: String -> Robot -> FilePath -> IO Bool
 allowedNowIO agent robot fp = (\u -> allowedNow u agent robot fp) <$> getCurrentTime
