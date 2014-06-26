@@ -265,85 +265,55 @@ getLargestDelay :: Ord a => IM.IntervalMap Int a -> Int -> Maybe a
 getLargestDelay = getValueBy max
 
 -- Interval Different Start | Same Start | Stop (Z)
-data IC = IA Int | IDSt Int | ISSt Int | IZ Int
+newtype ISt = ISt { gISt :: Int }
+  deriving (Show)
 
-getInt :: IC -> Int
-getInt (IA   i) = i
-getInt (IDSt i) = i
-getInt (ISSt i) = i
-getInt (IZ   i) = i
+data SM = SMSingle | SMStart | SMEnd | SMNoth
+  deriving Show
+
+evalState
+  :: (Eq a, Ord a)
+  => (a -> a -> a) -- criteria function
+  -> Maybe Int     -- previous index: may not exist (starting conditions)
+  -> Int           -- current index
+  -> Int           -- current index + 1
+  -> IM.IntervalMap Int a
+  -> (SM,a)
+evalState criteria' Nothing j z im = let
+  criteria = getValueBy criteria'
+  vj = criteria im j
+  vz = criteria im z
+  in if vj /= vz then (SMSingle,fromJust vj) else (SMStart,fromJust vj)
+evalState criteria' (Just a) j z im = let
+  criteria = getValueBy criteria'
+  va = criteria im a
+  vj = criteria im j
+  vz = criteria im z
+  in eval va vj vz
+
+  where
+    eval wa wj wz
+      | wj /= wa && wj /= wz = (SMSingle,fromJust wj)
+      | wj /= wa && wj == wz = (SMStart ,fromJust wj)
+      | wj == wa && wj /= wz = (SMEnd   ,fromJust wj)
+      | wj == wa && wj == wz = (SMNoth  ,fromJust wj)
 
 -- index by max, choose between ul and ul + 1
 -- may be worth considering same value interval merging
 mergeIntervalsWith
-  :: Ord a
+  :: (Ord a, Show a)
   => (a -> a -> a)
   -> IM.IntervalMap Int a
   -> IM.IntervalMap Int a
 mergeIntervalsWith criteria' im' = let
   points = intervalMapToLimits im'
-  criteria = getValueBy criteria'
+  fldl acc lst f = L.foldl' f acc lst
   in case points of
     []     -> IM.empty
-    (i:is) -> (\(_,_,q) -> q) $
-              -- j/ul is the previous point,
-              -- p is the current point
-              -- w I'm not sure
-              -- im is the new interval map
-              foldl (\(j,w,im) p ->
-                case j of
-                  -- Initial case
-                  IA   ul -> let v = fromJust . criteria im' $ ul + 1
-                                 c = case criteria im' (p + 1) of
-                                     Nothing -> IZ p
-                                     Just nv -> if nv == v
-                                                  then ISSt ul
-                                                  else IDSt p
-                             in case c of
-                                IZ   k -> (c,v,IM.insert (IM.Interval ul p) v im)
-                                IDSt k -> (c,v,IM.insert (IM.Interval ul p) v im)
-                                _      -> (c,v,im)
-
-                  -- previous was a different start
-                  IDSt ul -> let v = fromJust . criteria im' $ ul + 1
-                                 c = case criteria im' (p + 1) of
-                                     Nothing -> IZ p
-                                     Just nv -> if nv == v
-                                                  then ISSt ul
-                                                  else IDSt p
-                             in case c of
-                                IZ   k -> (c,v,IM.insert (IM.Interval ul p) v im)
-                                IDSt k -> (c,v,IM.insert (IM.Interval ul p) v im)
-                                _      -> (c,v,im)
-
-                  -- previous was the same time
-                  ISSt ul -> let v = fromJust . criteria im' $ ul
-                                 c = case criteria im' (p + 1) of
-                                     Nothing -> IZ p
-                                     Just nv -> if nv == v
-                                                  then ISSt ul
-                                                  else IDSt p
-                             in case c of
-                                IZ   k -> (c,v,IM.insert (IM.Interval ul p) v im)
-                                IDSt k -> (c,v,IM.insert (IM.Interval ul p) v im)
-                                _      -> (c,v,im)
-
-                  -- previous was a stopping point
-                  IZ ul   -> let v = fromJust . criteria im' $ ul
-                                 c = case criteria im' (p + 1) of
-                                     Nothing -> IZ p
-                                     Just nv -> IDSt p
-                             in case c of
-                                IZ   k -> (c,v,im)
-                                IDSt k -> (c,v,im)
-                                _      -> (c,v,im)
-
-
-                    ) (IA i,fromJust . criteria im' $ i,IM.empty) is
-
-{-mergeAdjacent :: (Eq a) => IM.IntervalMap Int a -> IM.IntervalMap Int a-}
-{-mergeAdjacent im' = let-}
-  {-points = intervalMapToLimits im'-}
-  {-in case points of-}
-    {-[]    -> IM.empty-}
-    {-xs    -> foldl1' (\im x -> if  ) xs-}
+    -- acc: previous value, previous starting index, new interval map
+    (i:is) -> (\(_,_,iM) -> iM) $ fldl (Nothing,Nothing,IM.empty) (i:is) $ \(va,a,im) j ->
+      case evalState criteria' a j (j+1) im' of
+        (SMSingle,v) -> (Just v, Just j, IM.insert (IM.Interval j j) v im)
+        (SMStart ,v) -> (Just v, Just j, im)
+        (SMEnd   ,v) -> (Just v, Just j, IM.insert (IM.Interval (fromJust a) j) v im)
+        (SMNoth  ,v) -> (Just v,      a, im)
