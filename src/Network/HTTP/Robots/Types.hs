@@ -7,7 +7,7 @@ import           Data.ByteString.Char8 (ByteString)
 import           Data.Time.Clock
 import           Data.Time.LocalTime()
 import qualified Data.List as L
-import qualified Data.IntervalMap.FingerTree as IM
+import qualified Data.IntervalMap as IM
 import qualified Data.Map.Strict as Map
 import Text.Regex.PCRE.Light
 

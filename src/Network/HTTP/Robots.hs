@@ -14,8 +14,7 @@ import           Data.Time.LocalTime()
 import           Data.Ratio
 import qualified Data.Foldable   as F
 import qualified Data.List       as L
-import qualified Data.IntervalMap.FingerTree as IM
-import qualified Data.FingerTree             as FT
+import qualified Data.IntervalMap as IM
 import qualified Data.Map.Strict as Map
 import qualified Data.Set        as Set
 import qualified System.FilePath  as FP
@@ -179,26 +178,21 @@ pathAllowed pds fp = case findDirective pds (BS.pack fp) of
     Just AllowD -> True
     _           -> False
 
--- | Test if a path is allowed with the given set of directives
-{-timeInterval :: IM.IntervalMap DiffTime Rational -> UTCTime -> Bool-}
-{-timeAllowed tds t-}
-  {-| isNull tds = True-}
-  {-| otherwise  = case IM.search (utctDayTime t) tds of-}
-                    {-[] -> False-}
-                    {-_  -> True-}
-
 hasTimeOfDayRestrictions :: String -> Robot -> Bool
 hasTimeOfDayRestrictions agent robot =
   case timeDirectives . getDirectives agent $ robot of
     Always -> False
     _      -> True
 
+imSearch :: (Ord k) => k -> IM.IntervalMap k v -> [(IM.Interval k,v)]
+imSearch = flip IM.containing
+
 -- | Test if a path is allowed with the given set of directives
 timeAllowed :: TimeDirectives -> UTCTime -> Bool
 timeAllowed Always _ = True
 timeAllowed (JustNow tim) t
   | isNull tim = False
-  | otherwise  = case IM.search (utctDayTime t) tim of
+  | otherwise  = case imSearch (utctDayTime t) tim of
                     [] -> False
                     _  -> True
 
@@ -224,13 +218,6 @@ allowedNow utctime agent robot fp =
   && timeAllowed (timeDirectives getDirectives' ) utctime
     where getDirectives' = getDirectives agent robot
 
-{-allowedWhen :: String -> Robot -> CrawlWhen-}
-{-allowedNow agent robot = let-}
-  {-dirs = lookAgentDirs agent . directives $ robot-}
-  {-in case dirs of-}
-    {-Nothing -> error "Should at least match * (3)"-}
-    {-Just dirs' -> case-}
-
 allowedNowIO :: String -> Robot -> FilePath -> IO Bool
 allowedNowIO agent robot fp = (\u -> allowedNow u agent robot fp) <$> getCurrentTime
 
@@ -252,7 +239,7 @@ getValueBy
   -> IM.IntervalMap b a
   -> b
   -> Maybe a
-getValueBy f im point = l2m f . map snd . IM.search point $ im
+getValueBy f im point = l2m f . map snd . imSearch point $ im
   where l2m g l = case l of
                   [] -> Nothing
                   _  -> Just . L.foldl1' g $ l
@@ -278,22 +265,19 @@ mergeIntervalsWith criteria' im' = let
     -- acc: previous value, previous starting index, new interval map
     (i:is) -> snd $ fldl (Nothing,IM.empty) (i:is) $ \(a,im) j ->
       case evalState criteria' a j (j+1) im' of
-        (SMSingle,v) -> (Just j, IM.insert (IM.Interval j j) v im)
+        (SMSingle,v) -> (Just j, IM.insert (IM.ClosedInterval j j) v im)
         (SMStart ,_) -> (Just j, im)
-        (SMEnd   ,v) -> (Just j, IM.insert (IM.Interval (fromJust a) j) v im)
+        (SMEnd   ,v) -> (Just j, IM.insert (IM.ClosedInterval (fromJust a) j) v im)
         (SMNoth  ,_) -> (     a, im)
 
   where
     intervalMapToLimits :: (Num b, Ord b, Eq b) => IM.IntervalMap b a -> [b]
-    intervalMapToLimits iM@(IM.IntervalMap ft) = nubSort
-                                            . concatMap (fromInterval . fromNode)
-                                            . F.toList $ ft
+    intervalMapToLimits iM = nubSort . concatMap fromInterval . IM.keys $ iM
       where
-        fromNode (IM.Node i _) = i
-        isThere im i = case IM.search i im of
+        isThere im i = case imSearch i im of
           [] -> Nothing
           _  -> Just i
-        fromInterval (IM.Interval x y)
+        fromInterval (IM.ClosedInterval x y)
           | x > 0 && y > 0 = mapMaybe (isThere iM) [x-1,x,x+1,y-1,y]
           | otherwise      = [x,y]
 

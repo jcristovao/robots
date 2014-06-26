@@ -16,13 +16,13 @@ import           Data.Maybe
 import           Data.Either
 import           Data.Time.Clock
 import           System.IO.Unsafe       (unsafePerformIO)
-import qualified Data.IntervalMap.FingerTree as IM
+import qualified Data.IntervalMap as IM
 
 import Debug.Trace
 
 
 mkInt :: Int -> Int -> Int -> IM.IntervalMap Int Int
-mkInt a b = IM.singleton (IM.Interval a b)
+mkInt a b = IM.singleton (IM.ClosedInterval a b)
 
 (\/) :: IM.IntervalMap Int Int -> IM.IntervalMap Int Int -> IM.IntervalMap Int Int
 (\/) = IM.union

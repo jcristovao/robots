@@ -12,7 +12,7 @@ import           Data.Char             (toUpper)
 import           Data.Time.Clock
 import           Data.Time.LocalTime()
 import           Data.Ratio
-import qualified Data.IntervalMap.FingerTree as IM
+import qualified Data.IntervalMap as IM
 
 import Network.HTTP.Robots.Types
 
@@ -61,7 +61,7 @@ parseTimeInterval = do
   void         $ (skipSpace >> char '-' >> skipSpace) <|> skipSpace
   (hours_end  , mins_end  ) <- parseHourMinute
   return . JustIn $
-    IM.Interval (secondsToDiffTime (hours_start * 60 * 60 + mins_start * 60))
+    IM.ClosedInterval (secondsToDiffTime (hours_start * 60 * 60 + mins_start * 60))
                 (secondsToDiffTime (hours_end   * 60 * 60 + mins_end   * 60))
 
 allDay :: TimeInterval
