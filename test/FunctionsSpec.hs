@@ -65,3 +65,28 @@ spec =
       show (mergeIntervalsWith max efgh) `shouldBe`
         show (mkInt 0 0 3 \/ mkInt 1 3 6 \/ mkInt 4 6 7)
 
+    it "can handle merged intervals (3)" $ do
+      let x =  mkInt  0  2  1
+            \/ mkInt  4  6  6
+            \/ mkInt  7  7  7
+            \/ mkInt  1  8  3
+            \/ mkInt  9  9  9
+            \/ mkInt 11 14  2
+            \/ mkInt 16 16  1
+            \/ mkInt 15 18  3
+            \/ mkInt 18 20  2
+            \/ mkInt 20 22  4
+            \/ mkInt 22 24  5
+
+          y =  mkInt  0  0  1
+            \/ mkInt  1  3  3
+            \/ mkInt  4  6  6
+            \/ mkInt  7  7  7
+            \/ mkInt  8  8  3
+            \/ mkInt  9  9  9
+            \/ mkInt 11 14  2
+            \/ mkInt 15 18  3
+            \/ mkInt 19 19  2
+            \/ mkInt 20 21  4
+            \/ mkInt 22 24  5
+      show (mergeIntervalsWith max x) `shouldBe` show y
