@@ -21,28 +21,35 @@ import qualified Data.IntervalMap.FingerTree as IM
 import Debug.Trace
 
 
-  -- this is just an ugly burn-in test - we collect examples of
-  -- robots.txt and check we can read them all.
+mkInt :: Int -> Int -> Int -> IM.IntervalMap Int Int
+mkInt a b = IM.singleton (IM.Interval a b)
 
+(\/) :: IM.IntervalMap Int Int -> IM.IntervalMap Int Int -> IM.IntervalMap Int Int
+(\/) = IM.union
 
 {-# ANN spec ("HLint: ignore Reduce duplication"::String) #-}
 spec :: Spec
 spec =
   describe "mergeIntervalsWith unit tests" $ do
     let a,b,c,ab,ac,abc,x,y,z,xyz :: IM.IntervalMap Int Int
-        a   = IM.singleton (IM.Interval  2  4) 3
-        b   = IM.singleton (IM.Interval  6  9) 5
-        c   = IM.singleton (IM.Interval 11 15) 7
-        ab  = a `IM.union` b
-        ac  = a `IM.union` c
-        bc  = b `IM.union` c
-        abc = a `IM.union` b `IM.union` c
-        x   = IM.singleton (IM.Interval  1  3) 3
-        y   = IM.singleton (IM.Interval  3  5) 2
-        z   = IM.singleton (IM.Interval  5  7) 4
+        a   = mkInt  2  6 3
+        b   = mkInt 10 14 5
+        c   = mkInt 18 22 7
+        ab  = a \/ b
+        ac  = a \/ c
+        bc  = b \/ c
+        abc = a \/ b \/ c
+        x   = mkInt  0  4 3
+        y   = mkInt  4  8 2
+        z   = mkInt  8 12 4
         xyz = x `IM.union` y `IM.union` z
     it "can handle separate intervals" $
       show (mergeIntervalsWith max abc) `shouldBe` show abc
 
     it "can handle consecutive intervals" $
       show (mergeIntervalsWith max xyz) `shouldBe` show xyz
+
+    it "can handle merged intervals (1)" $
+      show (mergeIntervalsWith max (xyz \/ ab)) `shouldBe`
+        show (mkInt 0 6 3 \/ mkInt 6 8 2 \/ mkInt 8 10 4 \/ mkInt 10 14 5)
+

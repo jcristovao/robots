@@ -237,9 +237,14 @@ allowedNowIO agent robot fp = (\u -> allowedNow u agent robot fp) <$> getCurrent
 isNull :: (F.Foldable f) => f a -> Bool
 isNull = F.foldr (\_ _ -> False) True
 
+
+-- Much more efficient nub . sort
+nubSort :: (Eq a, Ord a) => [a] -> [a]
+nubSort = Set.toAscList . Set.fromList
+
 -- | Get all limits of a set of intervals, sorted.
 intervalMapToLimits :: IM.IntervalMap Int a -> [Int]
-intervalMapToLimits (IM.IntervalMap ft) = L.sort
+intervalMapToLimits (IM.IntervalMap ft) = nubSort
                                         . concatMap (fromInterval . fromNode)
                                         . F.toList $ ft
   where fromNode (IM.Node i _) = i
@@ -292,9 +297,8 @@ mergeIntervalsWith criteria' im' = let
                                  c = case criteria im' (p + 1) of
                                      Nothing -> IZ p
                                      Just nv -> if nv == v
-                                                  then ISSt p
+                                                  then ISSt ul
                                                   else IDSt p
-
                              in case c of
                                 IZ   k -> (c,v,IM.insert (IM.Interval ul p) v im)
                                 IDSt k -> (c,v,IM.insert (IM.Interval ul p) v im)
@@ -305,7 +309,7 @@ mergeIntervalsWith criteria' im' = let
                                  c = case criteria im' (p + 1) of
                                      Nothing -> IZ p
                                      Just nv -> if nv == v
-                                                  then ISSt p
+                                                  then ISSt ul
                                                   else IDSt p
                              in case c of
                                 IZ   k -> (c,v,IM.insert (IM.Interval ul p) v im)
