@@ -263,8 +263,8 @@ getLargestDelay = getValueBy max
 data SM = SMSingle | SMStart | SMEnd | SMNoth
   deriving Show
 
--- index by max, choose between ul and ul + 1
--- may be worth considering same value interval merging
+-- | Converts a set of possibly overlapping intervals into a set of
+-- single distinct intervals, using the provided criteria to choose a value
 mergeIntervalsWith
   :: (Ord a, Num b, Ord b, Eq b)
   => (a -> a -> a)
