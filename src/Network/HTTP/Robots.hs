@@ -81,8 +81,12 @@ postProcessRobots (puds,unp) = (process puds, unp)
                               (ti,r) = extractTimeDirective x
                               in insertTimeDirective r ti acc)
                           newDirs' (filterTimeDirectives dirs)
+        convTimeD = newDirs { timeDirectives = case timeDirectives newDirs of
+                                Always     -> Always
+                                JustNow im -> JustNow (mergeIntervalsWith max im)
+                            }
 
-      in Map.insert userAgents newDirs dirsMap
+      in Map.insert userAgents convTimeD dirsMap
 
 parseRobotsTxt :: ByteString -> Either String RobotTxt
 parseRobotsTxt = fmap postProcessRobots . parseRobots
@@ -237,29 +241,16 @@ allowedNowIO agent robot fp = (\u -> allowedNow u agent robot fp) <$> getCurrent
 isNull :: (F.Foldable f) => f a -> Bool
 isNull = F.foldr (\_ _ -> False) True
 
-
 -- Much more efficient nub . sort
 nubSort :: (Eq a, Ord a) => [a] -> [a]
 nubSort = Set.toAscList . Set.fromList
 
 -- | Get all limits of a set of intervals, sorted.
-intervalMapToLimits :: IM.IntervalMap Int a -> [Int]
-intervalMapToLimits im@(IM.IntervalMap ft) = nubSort
-                                        . concatMap (fromInterval . fromNode)
-                                        . F.toList $ ft
-  where fromNode (IM.Node i _) = i
-        isThere im i = case IM.search i im of
-          [] -> Nothing
-          _  -> Just i
-        fromInterval (IM.Interval x y)
-          | x > 0 && y > 0 = mapMaybe (isThere im) [x-1,x,x+1,y-1,y]
-          | otherwise      = [x,y]
-
 getValueBy
-  :: Ord a
+  :: (Ord a, Ord b, Eq b, Num b)
   => (a -> a -> a)
-  -> IM.IntervalMap Int a
-  -> Int
+  -> IM.IntervalMap b a
+  -> b
   -> Maybe a
 getValueBy f im point = l2m f . map snd . IM.search point $ im
   where l2m g l = case l of
@@ -269,56 +260,69 @@ getValueBy f im point = l2m f . map snd . IM.search point $ im
 getLargestDelay :: Ord a => IM.IntervalMap Int a -> Int -> Maybe a
 getLargestDelay = getValueBy max
 
--- Interval Different Start | Same Start | Stop (Z)
-newtype ISt = ISt { gISt :: Int }
-  deriving (Show)
-
 data SM = SMSingle | SMStart | SMEnd | SMNoth
   deriving Show
-
-evalState
-  :: (Eq a, Ord a)
-  => (a -> a -> a) -- criteria function
-  -> Maybe Int     -- previous index: may not exist (starting conditions)
-  -> Int           -- current index
-  -> Int           -- current index + 1
-  -> IM.IntervalMap Int a
-  -> (SM,a)
-evalState criteria' Nothing j z im = let
-  criteria = getValueBy criteria'
-  vj = criteria im j
-  vz = criteria im z
-  in if vj /= vz then (SMSingle,fromJust vj) else (SMStart,fromJust vj)
-evalState criteria' (Just a) j z im = let
-  criteria = getValueBy criteria'
-  va = criteria im a
-  vj = criteria im j
-  vz = criteria im z
-  in eval va vj vz
-
-  where
-    eval wa wj wz
-      | wj /= wa && wj /= wz = (SMSingle,fromJust wj)
-      | wj /= wa && wj == wz = (SMStart ,fromJust wj)
-      | wj == wa && wj /= wz = (SMEnd   ,fromJust wj)
-      | wj == wa && wj == wz = (SMNoth  ,fromJust wj)
 
 -- index by max, choose between ul and ul + 1
 -- may be worth considering same value interval merging
 mergeIntervalsWith
-  :: (Ord a, Show a)
+  :: (Ord a, Num b, Ord b, Eq b)
   => (a -> a -> a)
-  -> IM.IntervalMap Int a
-  -> IM.IntervalMap Int a
+  -> IM.IntervalMap b a
+  -> IM.IntervalMap b a
 mergeIntervalsWith criteria' im' = let
   points = intervalMapToLimits im'
   fldl acc lst f = L.foldl' f acc lst
   in case points of
     []     -> IM.empty
     -- acc: previous value, previous starting index, new interval map
-    (i:is) -> (\(_,_,iM) -> iM) $ fldl (Nothing,Nothing,IM.empty) (i:is) $ \(va,a,im) j ->
+    (i:is) -> snd $ fldl (Nothing,IM.empty) (i:is) $ \(a,im) j ->
       case evalState criteria' a j (j+1) im' of
-        (SMSingle,v) -> (Just v, Just j, IM.insert (IM.Interval j j) v im)
-        (SMStart ,v) -> (Just v, Just j, im)
-        (SMEnd   ,v) -> (Just v, Just j, IM.insert (IM.Interval (fromJust a) j) v im)
-        (SMNoth  ,v) -> (Just v,      a, im)
+        (SMSingle,v) -> (Just j, IM.insert (IM.Interval j j) v im)
+        (SMStart ,_) -> (Just j, im)
+        (SMEnd   ,v) -> (Just j, IM.insert (IM.Interval (fromJust a) j) v im)
+        (SMNoth  ,_) -> (     a, im)
+
+  where
+    intervalMapToLimits :: (Num b, Ord b, Eq b) => IM.IntervalMap b a -> [b]
+    intervalMapToLimits iM@(IM.IntervalMap ft) = nubSort
+                                            . concatMap (fromInterval . fromNode)
+                                            . F.toList $ ft
+      where
+        fromNode (IM.Node i _) = i
+        isThere im i = case IM.search i im of
+          [] -> Nothing
+          _  -> Just i
+        fromInterval (IM.Interval x y)
+          | x > 0 && y > 0 = mapMaybe (isThere iM) [x-1,x,x+1,y-1,y]
+          | otherwise      = [x,y]
+
+    evalState
+      :: (Eq a, Ord a, Num b, Eq b, Ord b)
+      => (a -> a -> a) -- criteria function
+      -> Maybe b     -- previous index: may not exist (starting conditions)
+      -> b           -- current index
+      -> b           -- current index + 1
+      -> IM.IntervalMap b a
+      -> (SM,a)
+    evalState f Nothing j z im = let
+      criteria = getValueBy f
+      vj = criteria im j
+      vz = criteria im z
+      in if vj /= vz then (SMSingle,fromJust vj) else (SMStart,fromJust vj)
+    evalState f (Just a) j z im = let
+      criteria = getValueBy f
+      va = criteria im a
+      vj = criteria im j
+      vz = criteria im z
+      in eval va vj vz
+
+      where
+        eval wa wj wz
+          | wj /= wa && wj /= wz = (SMSingle,fromJust wj)
+          | wj /= wa && wj == wz = (SMStart ,fromJust wj)
+          | wj == wa && wj /= wz = (SMEnd   ,fromJust wj)
+          | otherwise            = (SMNoth  ,fromJust wj)
+          {-| wj == wa && wj == wz = (SMNoth  ,fromJust wj)-}
+
+
