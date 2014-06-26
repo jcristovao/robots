@@ -54,3 +54,4 @@ test-suite tests
                    , transformers
                    , attoparsec
                    , heredoc
+                   , fingertree >= 0.1.1 && < 0.2
