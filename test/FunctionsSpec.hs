@@ -31,25 +31,36 @@ mkInt a b = IM.singleton (IM.Interval a b)
 spec :: Spec
 spec =
   describe "mergeIntervalsWith unit tests" $ do
-    let a,b,c,ab,ac,abc,x,y,z,xyz :: IM.IntervalMap Int Int
+    let a,b,c, x,y,z, e,f,g,h :: IM.IntervalMap Int Int
         a   = mkInt  2  6 3
         b   = mkInt 10 14 5
         c   = mkInt 18 22 7
-        ab  = a \/ b
-        ac  = a \/ c
-        bc  = b \/ c
-        abc = a \/ b \/ c
+
         x   = mkInt  0  4 3
         y   = mkInt  4  8 2
         z   = mkInt  8 12 4
-        xyz = x `IM.union` y `IM.union` z
-    it "can handle separate intervals" $
+
+        e   = mkInt 0 2 3
+        f   = mkInt 2 4 5
+        g   = mkInt 4 6 7
+        h   = mkInt 1 3 6
+
+    it "can handle separate intervals" $ do
+      let abc = a \/ b \/ c
       show (mergeIntervalsWith max abc) `shouldBe` show abc
 
-    it "can handle consecutive intervals" $
+    it "can handle consecutive intervals" $ do
+      let xyz = x \/ y \/ z
       show (mergeIntervalsWith max xyz) `shouldBe` show xyz
 
-    it "can handle merged intervals (1)" $
+    it "can handle merged intervals (1)" $ do
+      let ab  = a \/ b
+          xyz = x \/ y \/ z
       show (mergeIntervalsWith max (xyz \/ ab)) `shouldBe`
         show (mkInt 0 6 3 \/ mkInt 6 8 2 \/ mkInt 8 10 4 \/ mkInt 10 14 5)
+
+    it "can handle merged intervals (2)" $ do
+      let efgh = e \/ f \/ g \/ h
+      show (mergeIntervalsWith max efgh) `shouldBe`
+        show (mkInt 0 1 3 \/ mkInt 1 3 6 \/ mkInt 3 4 5 \/ mkInt 4 6 7)
 
