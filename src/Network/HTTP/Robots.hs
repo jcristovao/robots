@@ -8,7 +8,7 @@ import           Data.Monoid ((<>))
 import           Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as BS
 import           Data.List             (find)
-import           Data.Maybe            (catMaybes,isJust,fromMaybe, fromJust)
+import           Data.Maybe
 import           Data.Time.Clock
 import           Data.Time.LocalTime()
 import           Data.Ratio
@@ -244,11 +244,16 @@ nubSort = Set.toAscList . Set.fromList
 
 -- | Get all limits of a set of intervals, sorted.
 intervalMapToLimits :: IM.IntervalMap Int a -> [Int]
-intervalMapToLimits (IM.IntervalMap ft) = nubSort
+intervalMapToLimits im@(IM.IntervalMap ft) = nubSort
                                         . concatMap (fromInterval . fromNode)
                                         . F.toList $ ft
   where fromNode (IM.Node i _) = i
-        fromInterval (IM.Interval x y) = [x,y]
+        isThere im i = case IM.search i im of
+          [] -> Nothing
+          _  -> Just i
+        fromInterval (IM.Interval x y)
+          | x > 0 && y > 0 = mapMaybe (isThere im) [x-1,x,x+1,y-1,y]
+          | otherwise      = [x,y]
 
 getValueBy
   :: Ord a

@@ -47,25 +47,21 @@ spec =
 
     it "can handle separate intervals" $ do
       let abc = a \/ b \/ c
-      intervalMapToLimits abc `shouldBe` [2,6,10,14,18,22]
       show (mergeIntervalsWith max abc) `shouldBe` show abc
 
     it "can handle consecutive intervals" $ do
       let xyz = x \/ y \/ z
-      intervalMapToLimits xyz `shouldBe` [0,4,8,12]
       show (mergeIntervalsWith max xyz) `shouldBe`
         show (mkInt 0 4 3 \/ mkInt 5 7 2 \/ mkInt 8 12 4)
 
     it "can handle merged intervals (1)" $ do
       let ab  = a \/ b
           xyz = x \/ y \/ z
-      intervalMapToLimits (xyz \/ ab) `shouldBe` [0,2,4,6,8,10,12,14]
       show (mergeIntervalsWith max (xyz \/ ab)) `shouldBe`
         show (mkInt 0 6 3 \/ mkInt 7 7 2 \/ mkInt 8 9 4 \/ mkInt 10 14 5)
 
     it "can handle merged intervals (2)" $ do
       let efgh = e \/ f \/ g \/ h
-      intervalMapToLimits efgh `shouldBe` [0,1,2,3,4,6]
       show (mergeIntervalsWith max efgh) `shouldBe`
         show (mkInt 0 0 3 \/ mkInt 1 3 6 \/ mkInt 4 6 7)
 
